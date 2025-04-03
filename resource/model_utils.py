@@ -39,14 +39,12 @@ def update_model(main_window):
 
     # Ensure record_button is updated
     if model_name == 'None':
-        main_window.update_record_button(False)
         main_window.update_remove_button(False)
         main_window.card_deletemodel.setContent(content)
         main_window.settings_badge.show()
         main_window.show_badge = True
     else:
         model_downloader(main_window)
-        main_window.update_record_button(True)
         main_window.update_remove_button(True)
         main_window.card_deletemodel.setContent(content)
         main_window.show_badge = False
@@ -56,6 +54,8 @@ def update_device(main_window):
     device = cfg.get(cfg.device).value
 
     if (get_cuda_device_count() == 0) and ((device == 'cuda')):
-        main_window.update_record_button(False)
+        #main_window.update_record_button(False)
+        pass
     else:
-        main_window.update_record_button(True)
+        #main_window.update_record_button(True)
+        pass
