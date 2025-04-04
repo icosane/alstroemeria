@@ -2,6 +2,7 @@ from enum import Enum
 
 from PyQt6.QtCore import QLocale
 from faster_whisper import available_models
+from argostranslate import argospm
 from qfluentwidgets import (qconfig, QConfig, OptionsConfigItem, Theme,
                             OptionsValidator, EnumSerializer, ConfigSerializer)
 
@@ -64,17 +65,48 @@ class DeviceSerializer(ConfigSerializer):
             raise ValueError(f"Invalid device: {value}")
         return device
 
+
+available_packages = argospm.get_available_packages()
+
+TranslationPackage = Enum(
+    'TranslationPackage', 
+    {
+        **{"NONE": "None"},
+        **{f"{pkg.from_code.upper()}_TO_{pkg.to_code.upper()}": f"{pkg.from_code}_{pkg.to_code}" 
+           for pkg in available_packages}
+    }
+)
+
+class TranslationPackageSerializer(ConfigSerializer):
+    """ Translation package serializer """
+    
+    def __init__(self):
+        self.package_map = {package.value: package for package in TranslationPackage}
+    
+    def serialize(self, package):
+        return package.value if package != TranslationPackage.NONE else "None"
+    
+    def deserialize(self, value: str):
+        if value == "None":
+            return TranslationPackage.NONE
+        package = self.package_map.get(value)
+        if package is None:
+            raise ValueError(f"Invalid translation package: {value}")
+        return package
+
 class Config(QConfig):
     language = OptionsConfigItem(
-        "MainWindow", "language", QLocale.Language.English, OptionsValidator(Language), LanguageSerializer(), restart=True)
+        "Settings", "language", QLocale.Language.English, OptionsValidator(Language), LanguageSerializer(), restart=True)
     themeMode = OptionsConfigItem("Window", "themeMode", Theme.AUTO,
                                 OptionsValidator(Theme), EnumSerializer(Theme), restart=True)
     model = OptionsConfigItem(
-        "MainWindow", "model", Model.NONE, OptionsValidator(Model), ModelSerializer(), restart=False)
+        "whisper", "model", Model.NONE, OptionsValidator(Model), ModelSerializer(), restart=False)
     device = OptionsConfigItem(
-        "MainWindow", "device", Device.CPU, OptionsValidator(Device), DeviceSerializer(), restart=False)
+        "whisper", "device", Device.CPU, OptionsValidator(Device), DeviceSerializer(), restart=False)
     dpiScale = OptionsConfigItem(
-        "MainWindow", "DpiScale", "Auto", OptionsValidator([1, 1.25, 1.5, 1.75, 2, "Auto"]), restart=True)   
+        "Settings", "DpiScale", "Auto", OptionsValidator([1, 1.25, 1.5, 1.75, 2, "Auto"]), restart=True) 
+    translation_package = OptionsConfigItem(
+        "Translation", "package", TranslationPackage.NONE, OptionsValidator(TranslationPackage), TranslationPackageSerializer(), restart=False)
 
 
 cfg = Config()

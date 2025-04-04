@@ -91,9 +91,9 @@ class FileLabel(QLabel):
 
     def open_file_dialog(self):
         #options = QFileDialog.Option.UseNativeDialog
-        self.file_path, _ = QFileDialog.getOpenFileName(self, "Select a Video File", "", "Video Files (*.mp4 *.avi *.mov *.mkv *.flv *.wmv);;All Files (*)")
+        self.file_path, _ = QFileDialog.getOpenFileName(self, "Select a Video or Subtitle File", "", "Video/Subtitle Files (*.mp4 *.avi *.mov *.mkv *.flv *.wmv *.srt);;Video Files (*.mp4 *.avi *.mov *.mkv *.flv *.wmv);;Subtitle Files (*.srt);;All Files (*)")
         if self.file_path:
-            if self.is_video_file(self.file_path):
+            if self.is_video_file(self.file_path) or self.is_subtitle_file(self.file_path):
                 self.fileSelected.emit(self.file_path)
                 self.file_accepted(self.file_path)
             else:
@@ -111,7 +111,7 @@ class FileLabel(QLabel):
         if event.mimeData().hasUrls():
             for url in event.mimeData().urls():
                 self.file_path = url.toLocalFile()
-                if self.is_video_file(self.file_path):
+                if self.is_video_file(self.file_path) or self.is_subtitle_file(self.file_path):
                     self.fileSelected.emit(self.file_path)
                     self.file_accepted(self.file_path)
                 else:
@@ -147,6 +147,12 @@ class FileLabel(QLabel):
     def is_video_file(self, file_path):
         # Check the file extension to determine if it's a video
         video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv']
+        _, ext = os.path.splitext(file_path)
+        return ext.lower() in video_extensions
+
+    def is_subtitle_file(self, file_path):
+        # Check the file extension to determine if it's a video
+        video_extensions = ['.srt']
         _, ext = os.path.splitext(file_path)
         return ext.lower() in video_extensions
 
@@ -450,7 +456,7 @@ class MainWindow(QMainWindow):
         self.card_setmodel = ComboBoxSettingCard(
             configItem=cfg.model,
             icon=FluentIcon.CLOUD_DOWNLOAD,
-            title=QCoreApplication.translate("MainWindow","Model"),
+            title=QCoreApplication.translate("MainWindow","Whisper Model"),
             content=QCoreApplication.translate("MainWindow", "Change whisper model"),
             texts=['None', 'tiny.en', 'tiny', 'base.en', 'base', 'small.en', 'small', 'medium.en', 'medium', 'large-v1', 'large-v2', 'large-v3', 'large', 'large-v3-turbo']
         )
@@ -469,6 +475,29 @@ class MainWindow(QMainWindow):
         self.card_deletemodel.clicked.connect(self.modelremover)
         if ((cfg.get(cfg.model).value == 'None')):
             self.card_deletemodel.button.setDisabled(True)
+
+        self.card_settlpackage = ComboBoxSettingCard(
+            configItem=cfg.translation_package,
+            icon=FluentIcon.CLOUD_DOWNLOAD,
+            title=QCoreApplication.translate("MainWindow","Argos Translate Model"),
+            content=QCoreApplication.translate("MainWindow", "Change Argos translate model"),
+            texts=[
+                "None", "sq_en", "ar_en", "az_en", "eu_en", "bn_en", "bg_en", "ca_en", "zh_tw_en", "zh_en", 
+                "cs_en", "da_en", "nl_en", "en_sq", "en_ar", "en_az", "en_eu", "en_bn", "en_bg", 
+                "en_ca", "en_zh", "en_zh_tw", "en_cs", "en_da", "en_nl", "en_eo", "en_et", "en_fi", 
+                "en_fr", "en_gl", "en_de", "en_el", "en_he", "en_hi", "en_hu", "en_id", "en_ga", 
+                "en_it", "en_ja", "en_ko", "en_lv", "en_lt", "en_ms", "en_no", "en_fa", "en_pl", 
+                "en_pt", "en_pt_br", "en_ro", "en_ru", "en_sk", "en_sl", "en_es", "en_sv", "en_tl", 
+                "en_th", "en_tr", "en_uk", "en_ur", "eo_en", "et_en", "fi_en", "fr_en", "gl_en", 
+                "de_en", "el_en", "he_en", "hi_en", "hu_en", "id_en", "ga_en", "it_en", "ja_en", 
+                "ko_en", "lv_en", "lt_en", "ms_en", "no_en", "fa_en", "pl_en", "pt_br_en", "pt_en", 
+                "pt_es", "ro_en", "ru_en", "sk_en", "sl_en", "es_en", "es_pt", "sv_en", "tl_en", 
+                "th_en", "tr_en", "uk_en", "ur_en"
+            ]
+        )
+
+        card_layout.addWidget(self.card_settlpackage, alignment=Qt.AlignmentFlag.AlignTop)
+        #cfg.model.valueChanged.connect(self.model_changed.emit)
 
         self.card_setlanguage = ComboBoxSettingCard(
             configItem=cfg.language,
