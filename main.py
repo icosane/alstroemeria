@@ -6,12 +6,13 @@ from qfluentwidgets import setThemeColor, ToolButton, TransparentToolButton, Flu
 from winrt.windows.ui.viewmanagement import UISettings, UIColorType
 from resource.config import cfg, QConfig
 from resource.model_utils import update_model, update_device
+from resource.subtitle_creator import SubtitleCreator, ModelLoader, AudioExtractorThread, TranscriptionWorker
 import shutil, psutil
 import traceback, gc
 from faster_whisper import WhisperModel
 import tempfile
 from ctranslate2 import get_cuda_device_count
-import ffmpeg, time
+import glob
 
 def get_lib_paths():
     if getattr(sys, 'frozen', False):  # Running inside PyInstaller
@@ -44,125 +45,8 @@ else:
 
 if os.name == 'nt':
     import ctypes
-    myappid = u'icosane.alstroemeria.voc.100'  # arbitrary string
+    myappid = u'icosane.alstroemeria.tlvo.100'  # arbitrary string
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-
-
-class ModelLoader(QThread):
-    model_loaded = pyqtSignal(object, str)
-
-    def __init__(self, model, device):
-        super().__init__()
-        self.model = model
-        self.device_type = device
-
-    def run(self):
-        try:
-            model = WhisperModel(
-                self.model,
-                device=self.device_type,
-                compute_type="float32" if self.device_type == "cpu" else "float16",
-                cpu_threads=psutil.cpu_count(logical=False),
-                download_root="./models/whisper",
-                local_files_only=True
-            )
-            self.model_loaded.emit(model, self.model)
-        except Exception as e:
-            error_box = MessageBox("Error", f"Error loading model: {str(e)}", parent=window)
-            error_box.cancelButton.hide()
-            error_box.buttonLayout.insertStretch(1)
-
-class TranscriptionWorker(QThread):
-    # Signal to request file path from main thread
-    request_save_path = pyqtSignal(str)
-    # Signal to indicate completion
-    finished_signal = pyqtSignal(str, bool)
-    
-    def __init__(self, model, audio_file):
-        super().__init__()
-        self.model = model
-        self.audio_file = audio_file
-        self._mutex = QMutex()
-        self._abort = False
-
-    def run(self):
-        try:
-            # Perform transcription
-            segments, _ = self.model.transcribe(self.audio_file)
-            transcription = "".join([segment.text for segment in segments])
-            
-            # Request save path from main thread
-            self._mutex.lock()
-            save_path = ""
-            self.request_save_path.emit(transcription)
-            self._mutex.unlock()
-            
-            # Wait for main thread to provide path
-            while not self._abort and not hasattr(self, 'save_path'):
-                self.msleep(100)
-            
-            if self._abort:
-                return
-                
-            if self.save_path:
-                with open(self.save_path, "w") as f:
-                    f.write(transcription)
-                self.finished_signal.emit(self.save_path, True)
-            else:
-                self.finished_signal.emit("", False)
-
-        except Exception as e:
-            self.finished_signal.emit(f"Error: {str(e)}", False)
-        finally:
-            try:
-                if os.path.exists(self.audio_file):
-                    os.remove(self.audio_file)
-            except Exception as e:
-                self.finished_signal.emit(f"Error deleting temp file: {e}", False)
-
-    def abort(self):
-        self._mutex.lock()
-        self._abort = True
-        self._mutex.unlock()
-        self.wait()
-
-class AudioExtractorThread(QThread):
-    audio_extracted = pyqtSignal(str)  # signal emitted when audio extraction is complete
-    error_occurred = pyqtSignal(str)  # signal emitted when an error occurs
-
-    def __init__(self, video_file_path):
-        super().__init__()
-        self.video_file_path = video_file_path
-        self.temp_dir = tempfile.gettempdir()
-        self.temp_filename = os.path.join(self.temp_dir, f"temp_audio_{int(time.time())}.wav")
-
-    def run(self):
-        try:
-            # Print temp file path for debugging
-            print(f"Extracting audio to: {self.temp_filename}")
-            
-            # Ensure directory exists
-            os.makedirs(os.path.dirname(self.temp_filename), exist_ok=True)
-            
-            # Extract audio
-            (
-                ffmpeg.input(self.video_file_path)
-                .output(self.temp_filename, format='wav', acodec='pcm_s16le', ac=1, ar='16k')
-                .overwrite_output()
-                .run(capture_stdout=True, capture_stderr=True)
-            )
-            
-            # Verify file was created
-            if os.path.exists(self.temp_filename):
-                print(f"Audio extraction successful, file size: {os.path.getsize(self.temp_filename)} bytes")
-                self.audio_extracted.emit(self.temp_filename)
-            else:
-                self.error_occurred.emit("Audio file was not created")
-        except ffmpeg.Error as e:
-            self.error_occurred.emit(f"Error extracting audio: {e}")
-        except Exception as e:
-            self.error_occurred.emit(f"An error occurred: {e}")
-
 
 class FileLabel(QLabel):
     fileSelected = pyqtSignal(str)
@@ -185,9 +69,9 @@ class FileLabel(QLabel):
         font_size = "16px"
         return f'''
             <p style="text-align: center; font-size: {font_size}; color: {color};">
-                <br><br> Drag & drop any video file here <br>
+                <br><br> Drag & drop any video or subtitle file here <br>
                 <br>or<br><br> 
-                <a href="#" style="color: {color}; text-decoration: underline; "><strong>Browse file</strong></a>
+                <a href="" style="color: {color};"><strong>Click anywhere to browse file</strong></a>
                 <br>
             </p>
         '''
@@ -238,6 +122,16 @@ class FileLabel(QLabel):
         self.setStyleSheet("")
         new_widget = _on_accepted_Widget(file_path, self.main_window)
 
+        if file_path.lower().endswith('.srt'):
+            # Look for corresponding audio file
+            base_name = os.path.splitext(os.path.basename(file_path))[0]
+            temp_dir = tempfile.gettempdir()
+            audio_files = glob.glob(os.path.join(temp_dir, f"temp_audio_*.wav"))
+            
+            # Check if any audio file matches our SRT (by base name)
+            has_audio = any(base_name in os.path.basename(audio) for audio in audio_files)
+            new_widget.set_audio_state(has_audio)
+
         central_widget = self.main_window.centralWidget()
         layout = central_widget.layout()
 
@@ -247,6 +141,8 @@ class FileLabel(QLabel):
         self.deleteLater()
 
         layout.insertWidget(index, new_widget)
+
+        self.main_window.back_button.show()
 
     def is_video_file(self, file_path):
         # Check the file extension to determine if it's a video
@@ -260,6 +156,8 @@ class _on_accepted_Widget(QWidget):
         self.layout = QVBoxLayout()
         self.main_window = main_window
         self.file_path = file_path
+        self.is_srt = file_path.lower().endswith('.srt')
+        self.has_audio = False  # Track if audio file exists
         
         self.card_currentfile = SelectedFileCard(file_path)
         self.layout.addWidget(self.card_currentfile)
@@ -267,6 +165,8 @@ class _on_accepted_Widget(QWidget):
         self.getsub = PushButton(FluentIcon.FONT_SIZE, 'Create subtitles')
         self.gettl = PushButton(FluentIcon.LANGUAGE, 'Translate')
         self.vo = PushButton(FluentIcon.VOLUME, 'Voice over')
+
+        self.update_button_states()
 
         self.getsub.clicked.connect(self.start_subtitle_process)
 
@@ -277,11 +177,33 @@ class _on_accepted_Widget(QWidget):
         self.layout.addStretch()
         self.setLayout(self.layout)
 
+    def update_button_states(self):
+        """Update button states based on current file and audio status"""
+        if not self.is_srt:  # Video file
+            self.getsub.setEnabled(True)
+            self.gettl.setEnabled(False)
+            self.vo.setEnabled(False)
+        else:  # SRT file
+            self.getsub.setEnabled(False)
+            self.gettl.setEnabled(True)
+            self.vo.setEnabled(self.has_audio)
+
+    def set_audio_state(self, has_audio):
+        """Update audio file state and refresh buttons"""
+        self.has_audio = has_audio
+        self.update_button_states()
+
     def start_subtitle_process(self):
         self.main_window.start_subtitle_process(self.file_path)
 
-class SelectedFileCard(HeaderCardWidget):
+    def update_file(self, new_file_path):
+        """Update the file path and button states"""
+        self.file_path = new_file_path
+        self.is_srt = new_file_path.lower().endswith('.srt')
+        self.card_currentfile.update_file(new_file_path)
+        self.update_button_states()
 
+class SelectedFileCard(HeaderCardWidget):
     def __init__(self, file_path, parent=None):
         super().__init__(parent)
         self.setTitle('Selected file')
@@ -317,6 +239,11 @@ class SelectedFileCard(HeaderCardWidget):
 
         self.viewLayout.addLayout(self._layout)
 
+    def update_file(self, file_path):
+        """Update the displayed file information"""
+        self.file_name = os.path.basename(file_path)
+        self.fileLabel.setText('<b>{}</b>'.format(self.file_name))
+
 class MainWindow(QMainWindow):
     theme_changed = pyqtSignal()
     model_changed = pyqtSignal()
@@ -331,13 +258,13 @@ class MainWindow(QMainWindow):
         self.setup_theme()
         self.center()
         self.model = None
-        self.model_mutex = QMutex()
-        self.worker_mutex = QMutex()
         self.setAcceptDrops(True)
 
         self.theme_changed.connect(self.update_theme)
         self.model_changed.connect(lambda: update_model(self))
         self.device_changed.connect(lambda: update_device(self))
+
+        self.subtitle_creator = SubtitleCreator(self, cfg)
 
         QTimer.singleShot(100, self.init_check)
 
@@ -435,9 +362,14 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.filepicker)
 
         self.settings_button = TransparentToolButton(FluentIcon.SETTING)
+
+        self.back_button = TransparentToolButton(FluentIcon.LEFT_ARROW)
+        self.back_button.hide()
+        
         
         settings_layout = QHBoxLayout()
         settings_layout.addWidget(self.settings_button)
+        settings_layout.addWidget(self.back_button)
         settings_layout.addStretch()
         settings_layout.setContentsMargins(5, 5, 5, 5)
 
@@ -449,10 +381,29 @@ class MainWindow(QMainWindow):
 
         #connect
         self.settings_button.clicked.connect(self.settings_window)
+        self.back_button.clicked.connect(self.return_to_filepicker)
 
         main_widget = QWidget()
         main_widget.setLayout(main_layout)
         self.setCentralWidget(main_widget)
+
+    def return_to_filepicker(self):
+        central_widget = self.centralWidget()
+        layout = central_widget.layout()
+        
+        # Find the current file widget (should be at index 0)
+        current_widget = layout.itemAt(0).widget()
+        
+        # Remove the current widget
+        layout.removeWidget(current_widget)
+        current_widget.deleteLater()
+        
+        # Add back the file picker
+        self.filepicker = FileLabel(self)
+        layout.insertWidget(0, self.filepicker)
+        
+        # Hide the back button
+        self.back_button.hide()
 
     def settings_layout(self):        
         settings_layout = QVBoxLayout()
@@ -668,82 +619,38 @@ class MainWindow(QMainWindow):
             self.update_remove_button(False)
 
     def start_subtitle_process(self, file_path):
-        """Entry point for subtitle creation"""
-        if cfg.get(cfg.model).value == 'None':
-            return
-            
-        self.current_file_path = file_path
-        self.progressbar.start()
-        if hasattr(self, 'transcription_worker'):
-            self.transcription_worker.abort()
-            self.transcription_worker.deleteLater()
-        
-        self.extract_audio(file_path)
-
-    def extract_audio(self, file_path):
-        """Start audio extraction"""
-        self.extraction_worker = AudioExtractorThread(file_path)
-        self.extraction_worker.audio_extracted.connect(self.on_audio_extracted)
-        #self.extraction_worker.error_occurred.connect(self.show_error)
-        self.extraction_worker.start()
-
-    def on_audio_extracted(self, audio_file):
-        """When audio is extracted, load model or transcribe if model is ready"""
-        self.current_audio_file = audio_file
-        if self.model is None:
-            self.load_model()
-        else:
-            self.transcribe_audio(audio_file)
-
-    def load_model(self):
-        """Load model if needed"""
-        if self.model is None:
-            model_name = cfg.get(cfg.model).value
-            device = cfg.get(cfg.device).value
-            self.model_loader = ModelLoader(model_name, device)
-            self.model_loader.model_loaded.connect(self.on_model_ready)
-            self.model_loader.start()
-        else:
-            self.on_model_ready(self.model, cfg.get(cfg.model).value)
-
-    def on_model_ready(self, model, model_name):
-        """When model is loaded/ready, transcribe the audio"""
-        self.model = model
-        if hasattr(self, 'current_audio_file'):
-            self.transcribe_audio(self.current_audio_file)
-
-    def transcribe_audio(self, audio_file):
-        """Start transcription with loaded model"""
-        self.transcription_worker = TranscriptionWorker(self.model, audio_file)
-        
-        # Connect signals
-        self.transcription_worker.request_save_path.connect(self.handle_save_path_request)
-        self.transcription_worker.finished_signal.connect(self.on_transcription_done)
-        self.transcription_worker.finished.connect(self.cleanup_worker)
-        
-        self.transcription_worker.start()
+        """Delegate to subtitle creator"""
+        self.subtitle_creator.start_subtitle_process(file_path)
 
     def handle_save_path_request(self, transcription):
         """Handle save path request in main thread"""
         file_path, _ = QFileDialog.getSaveFileName(
-            self,  # Parent to main window
+            self,
             "Save Transcription", 
             "", 
-            "Text Files (*.txt)"
+            "Subtitle Files (*.srt)"
         )
         
-        if hasattr(self, 'transcription_worker'):
+        if hasattr(self.subtitle_creator, 'transcription_worker'):
             if file_path:
-                self.transcription_worker.save_path = file_path
+                self.subtitle_creator.transcription_worker.save_path = file_path
             else:
-                self.transcription_worker.save_path = ""
-                self.transcription_worker.abort()
+                self.subtitle_creator.transcription_worker.save_path = ""
+                self.subtitle_creator.transcription_worker.abort()
 
     def on_transcription_done(self, result, success):
         """Handle transcription completion"""
         self.progressbar.stop()
         
         if success:
+            central_widget = self.centralWidget()
+            layout = central_widget.layout()
+            current_widget = layout.itemAt(0).widget()
+
+            if hasattr(current_widget, 'update_file'):
+                current_widget.update_file(result)
+                current_widget.set_audio_state(False)
+
             InfoBar.success(
                 title="Success",
                 content=f"Transcription saved to {result}",
@@ -758,11 +665,68 @@ class MainWindow(QMainWindow):
             error_box.cancelButton.hide()
             error_box.buttonLayout.insertStretch(1)
 
+    def handle_keep_audio(self, audio_file):
+        """Show dialog asking if user wants to keep audio file"""
+
+        central_widget = self.centralWidget()
+        layout = central_widget.layout()
+        current_widget = layout.itemAt(0).widget()
+
+        box = MessageBox(
+            "Keep audio file?",
+            "Do you want to keep the extracted audio file?",
+            self
+        )
+        box.yesButton.setText("Keep")
+        box.cancelButton.setText("Delete")
+        
+        # Store the result before checking
+        result = box.exec()
+        
+        if result == 1:  # 1 is the value for yesSignal
+            if hasattr(current_widget, 'set_audio_state'):
+                current_widget.set_audio_state(True)
+        else:
+            try:
+                os.remove(audio_file)
+                # User chose to delete the audio file
+                if hasattr(current_widget, 'set_audio_state'):
+                    current_widget.set_audio_state(False)
+            except Exception as e:
+                InfoBar.error(
+                    title="Error",
+                    content=f"Failed to delete audio file: {e}",
+                    parent=self
+                )
+            
+    def update_vo_button_state(self, enabled):
+        """Update the Voice Over button state in the current widget"""
+        central_widget = self.centralWidget()
+        layout = central_widget.layout()
+        current_widget = layout.itemAt(0).widget()
+        
+        if hasattr(current_widget, 'vo'):
+            current_widget.vo.setEnabled(enabled)
+
     def cleanup_worker(self):
         """Clean up worker thread"""
-        if hasattr(self, 'transcription_worker'):
-            self.transcription_worker.deleteLater()
-            del self.transcription_worker
+        if hasattr(self.subtitle_creator, 'transcription_worker'):
+            self.subtitle_creator.transcription_worker.deleteLater()
+            del self.subtitle_creator.transcription_worker
+
+    def closeEvent(self, event):
+        """Clean up temp files when closing the app"""
+        temp_dir = tempfile.gettempdir()
+        temp_files = glob.glob(os.path.join(temp_dir, "temp_audio_*.wav"))
+        
+        for file in temp_files:
+            try:
+                os.remove(file)
+            except Exception as e:
+                print(f"Error deleting temp file {file}: {e}")
+        
+        super().closeEvent(event)
+
 
 if __name__ == "__main__":
     if cfg.get(cfg.dpiScale) != "Auto":
