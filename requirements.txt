@@ -10,3 +10,4 @@ nvidia-cudnn-cu12==9.5.1.17
 argostranslate==1.9.6
 ffmpeg-binaries-compat==1.0.1
 ffmpeg-python==0.2.0
+git+https://github.com/idiap/coqui-ai-TTS.git@dev
