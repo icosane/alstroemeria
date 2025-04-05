@@ -7,6 +7,7 @@ from winrt.windows.ui.viewmanagement import UISettings, UIColorType
 from resource.config import cfg, QConfig
 from resource.model_utils import update_model, update_device
 from resource.subtitle_creator import SubtitleCreator, ModelLoader, AudioExtractorThread, TranscriptionWorker
+from resource.argos_utils import update_package
 import shutil, psutil
 import traceback, gc
 from faster_whisper import WhisperModel
@@ -254,6 +255,7 @@ class MainWindow(QMainWindow):
     theme_changed = pyqtSignal()
     model_changed = pyqtSignal()
     device_changed = pyqtSignal()
+    package_changed = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
@@ -269,6 +271,7 @@ class MainWindow(QMainWindow):
         self.theme_changed.connect(self.update_theme)
         self.model_changed.connect(lambda: update_model(self))
         self.device_changed.connect(lambda: update_device(self))
+        self.package_changed.connect(lambda: update_package(self))
 
         self.subtitle_creator = SubtitleCreator(self, cfg)
 
@@ -362,6 +365,11 @@ class MainWindow(QMainWindow):
 
         self.move(x, y)
 
+    def update_argos_remove_button_state(self,enabled):
+        """Update the Argos package remove button state based on current selection"""
+        if hasattr(self, 'card_deleteargosmodel'):
+            self.card_deleteargosmodel.button.setEnabled(enabled)
+
     def main_layout(self):
         main_layout = QVBoxLayout()
         self.filepicker = FileLabel(self)
@@ -451,7 +459,7 @@ class MainWindow(QMainWindow):
             if cfg.get(cfg.device).value == 'cuda':
                 cfg.set(cfg.device, 'cpu')
 
-        cfg.model.valueChanged.connect(self.device_changed.emit)
+        cfg.device.valueChanged.connect(self.device_changed.emit)
 
         self.card_setmodel = ComboBoxSettingCard(
             configItem=cfg.model,
@@ -464,20 +472,8 @@ class MainWindow(QMainWindow):
         card_layout.addWidget(self.card_setmodel, alignment=Qt.AlignmentFlag.AlignTop)
         cfg.model.valueChanged.connect(self.model_changed.emit)
 
-        self.card_deletemodel = PushSettingCard(
-            text=QCoreApplication.translate("MainWindow","Remove"),
-            icon=FluentIcon.BROOM,
-            title=QCoreApplication.translate("MainWindow","Remove whisper model"),
-            content=QCoreApplication.translate("MainWindow", "Delete currently selected whisper model. Currently selected: <b>{}</b>").format(cfg.get(cfg.model).value),
-        )
-
-        card_layout.addWidget(self.card_deletemodel, alignment=Qt.AlignmentFlag.AlignTop)
-        self.card_deletemodel.clicked.connect(self.modelremover)
-        if ((cfg.get(cfg.model).value == 'None')):
-            self.card_deletemodel.button.setDisabled(True)
-
         self.card_settlpackage = ComboBoxSettingCard(
-            configItem=cfg.translation_package,
+            configItem=cfg.package,
             icon=FluentIcon.CLOUD_DOWNLOAD,
             title=QCoreApplication.translate("MainWindow","Argos Translate Model"),
             content=QCoreApplication.translate("MainWindow", "Change Argos translate model"),
@@ -497,7 +493,31 @@ class MainWindow(QMainWindow):
         )
 
         card_layout.addWidget(self.card_settlpackage, alignment=Qt.AlignmentFlag.AlignTop)
-        #cfg.model.valueChanged.connect(self.model_changed.emit)
+        cfg.package.valueChanged.connect(self.package_changed.emit)
+
+        self.card_deletemodel = PushSettingCard(
+            text=QCoreApplication.translate("MainWindow","Remove"),
+            icon=FluentIcon.BROOM,
+            title=QCoreApplication.translate("MainWindow","Remove whisper model"),
+            content=QCoreApplication.translate("MainWindow", "Delete currently selected whisper model. Currently selected: <b>{}</b>").format(cfg.get(cfg.model).value),
+        )
+
+        card_layout.addWidget(self.card_deletemodel, alignment=Qt.AlignmentFlag.AlignTop)
+        self.card_deletemodel.clicked.connect(self.modelremover)
+        if ((cfg.get(cfg.model).value == 'None')):
+            self.card_deletemodel.button.setDisabled(True)
+
+        self.card_deleteargosmodel = PushSettingCard(
+            text=QCoreApplication.translate("MainWindow","Remove"),
+            icon=FluentIcon.BROOM,
+            title=QCoreApplication.translate("MainWindow","Remove Argos Translate package"),
+            content=QCoreApplication.translate("MainWindow", "Delete currently selected translation package. Currently selected: <b>{}</b>").format(cfg.get(cfg.package).value),
+        )
+
+        card_layout.addWidget(self.card_deleteargosmodel, alignment=Qt.AlignmentFlag.AlignTop)
+        self.card_deleteargosmodel.clicked.connect(self.packageremover)
+        if ((cfg.get(cfg.package).value == 'None')):
+            self.card_deleteargosmodel.button.setDisabled(True)
 
         self.card_setlanguage = ComboBoxSettingCard(
             configItem=cfg.language,
@@ -569,7 +589,7 @@ class MainWindow(QMainWindow):
             self.settings_win = self.settings_layout()
             self.settings_win.setWindowTitle("Settings")
             self.settings_win.setGeometry(100,100,660,776)
-            self.settings_win.setMinimumSize(677,808)
+            self.settings_win.setMinimumSize(677,908)
 
         self.settings_win.show()
         self.settings_win.activateWindow()
@@ -604,6 +624,71 @@ class MainWindow(QMainWindow):
                     duration=2000,
                     parent=self
                 )
+
+    def packageremover(self):
+        language_pair = cfg.get(cfg.package).value
+        
+        package_pattern = os.path.join(
+            base_dir,
+            "models/argostranslate/data/argos-translate/packages",
+            f"translate-{language_pair}-*"
+        )
+
+        # Remove .argosmodel file (no wildcard needed)
+        model_file = os.path.join(
+            base_dir,
+            "models/argostranslate/cache/argos-translate/downloads",
+            f"translate-{language_pair}.argosmodel"
+        )
+
+        try:
+            # Remove matching package directories
+            removed_dirs = False
+            for dir_path in glob.glob(package_pattern):
+                if os.path.isdir(dir_path):
+                    shutil.rmtree(dir_path)
+                    removed_dirs = True
+            
+            # Remove model file if exists
+            removed_file = False
+            if os.path.exists(model_file):
+                os.remove(model_file)
+                removed_file = True
+            
+            # Only update config if we actually removed something
+            if removed_dirs or removed_file:
+                cfg.set(cfg.package, 'None')
+                
+                InfoBar.success(
+                    title=QCoreApplication.translate("MainWindow", "Success"),
+                    content=QCoreApplication.translate("MainWindow", "Model removed successfully"),
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.BOTTOM,
+                    duration=2000,
+                    parent=self
+                )
+            else:
+                InfoBar.warning(
+                    title=QCoreApplication.translate("MainWindow", "Warning"),
+                    content=QCoreApplication.translate("MainWindow", "No model found to remove"),
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.BOTTOM,
+                    duration=2000,
+                    parent=self
+                )
+
+        except Exception as e:
+            InfoBar.error(
+                title=QCoreApplication.translate("MainWindow", "Error"),
+                content=QCoreApplication.translate("MainWindow", f"Failed to remove model: {str(e)}"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.BOTTOM,
+                duration=2000,
+                parent=self
+            )
 
     def on_model_download_finished(self, status):
         if status == "start":
@@ -753,9 +838,23 @@ class MainWindow(QMainWindow):
                 os.remove(file)
             except Exception as e:
                 print(f"Error deleting temp file {file}: {e}")
+
+        for widget in QApplication.topLevelWidgets():
+            widget.close()
         
         super().closeEvent(event)
 
+    def on_package_download_finished(self, status):
+        if status == "start":
+            print(f"Downloading {cfg.get(cfg.package).value} package")
+            self.update_argos_remove_button_state(False)
+        elif status == "success":
+            print("Package installed successfully!")
+            self.update_argos_remove_button_state(True)
+        elif status.startswith("error"):
+            #self.show_error_message(status)
+            print(status)
+            self.update_argos_remove_button_state(False)
 
 if __name__ == "__main__":
     if cfg.get(cfg.dpiScale) != "Auto":

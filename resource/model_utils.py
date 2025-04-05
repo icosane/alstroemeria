@@ -1,7 +1,6 @@
 from PyQt6.QtCore import QThread, pyqtSignal, QCoreApplication
 import os
 from faster_whisper import download_model
-from ctranslate2 import get_cuda_device_count
 from resource.config import cfg
 
 class ModelDownloaderThread(QThread):
@@ -48,10 +47,4 @@ def update_model(main_window):
 
 def update_device(main_window):
     device = cfg.get(cfg.device).value
-
-    if (get_cuda_device_count() == 0) and ((device == 'cuda')):
-        #main_window.update_record_button(False)
-        pass
-    else:
-        #main_window.update_record_button(True)
-        pass
+    os.environ["ARGOS_DEVICE_TYPE"] = f"{device}"

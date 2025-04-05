@@ -1,10 +1,47 @@
 from enum import Enum
-
+import os, sys
+from pathlib import Path
 from PyQt6.QtCore import QLocale
 from faster_whisper import available_models
-from argostranslate import argospm
 from qfluentwidgets import (qconfig, QConfig, OptionsConfigItem, Theme,
                             OptionsValidator, EnumSerializer, ConfigSerializer)
+
+
+class ArgosPathManager:
+    """Manages Argos Translate directory configuration"""
+
+    @staticmethod
+    def initialize():
+        """Set up custom directories for Argos Translate"""
+        # Set base directory
+        if getattr(sys, 'frozen', False):
+            base_dir = os.path.dirname(sys.executable)  # PyInstaller bundle
+        else:
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+        ARGOS_PACKAGES_DIR = os.path.join(base_dir, "models", "argostranslate")
+        os.makedirs(ARGOS_PACKAGES_DIR, exist_ok=True)
+
+        # Set environment variables
+        os.environ.update({
+            "XDG_DATA_HOME": str(Path(ARGOS_PACKAGES_DIR) / "data"),
+            "XDG_CONFIG_HOME": str(Path(ARGOS_PACKAGES_DIR) / "config"),
+            "XDG_CACHE_HOME": str(Path(ARGOS_PACKAGES_DIR) / "cache"),
+            "ARGOS_PACKAGES_DIR": str(Path(ARGOS_PACKAGES_DIR) / "data" / "argos-translate" / "packages"),
+            "ARGOS_TRANSLATE_DATA_DIR": str(Path(ARGOS_PACKAGES_DIR) / "data"),
+            "ARGOS_DEVICE_TYPE": "cpu"
+        })
+
+        # Create directories
+        Path(os.environ["ARGOS_PACKAGES_DIR"]).mkdir(parents=True, exist_ok=True)
+
+        return ARGOS_PACKAGES_DIR
+
+
+# Initialize Argos paths BEFORE any Argos Translate imports
+ArgosPathManager.initialize()
+
+from argostranslate import argospm
 
 class Language(Enum):
     """ Language enumeration """
@@ -69,23 +106,23 @@ class DeviceSerializer(ConfigSerializer):
 available_packages = argospm.get_available_packages()
 
 TranslationPackage = Enum(
-    'TranslationPackage', 
+    'TranslationPackage',
     {
         **{"NONE": "None"},
-        **{f"{pkg.from_code.upper()}_TO_{pkg.to_code.upper()}": f"{pkg.from_code}_{pkg.to_code}" 
+        **{f"{pkg.from_code.upper()}_TO_{pkg.to_code.upper()}": f"{pkg.from_code}_{pkg.to_code}"
            for pkg in available_packages}
     }
 )
 
 class TranslationPackageSerializer(ConfigSerializer):
     """ Translation package serializer """
-    
+
     def __init__(self):
         self.package_map = {package.value: package for package in TranslationPackage}
-    
+
     def serialize(self, package):
         return package.value if package != TranslationPackage.NONE else "None"
-    
+
     def deserialize(self, value: str):
         if value == "None":
             return TranslationPackage.NONE
@@ -104,8 +141,8 @@ class Config(QConfig):
     device = OptionsConfigItem(
         "whisper", "device", Device.CPU, OptionsValidator(Device), DeviceSerializer(), restart=False)
     dpiScale = OptionsConfigItem(
-        "Settings", "DpiScale", "Auto", OptionsValidator([1, 1.25, 1.5, 1.75, 2, "Auto"]), restart=True) 
-    translation_package = OptionsConfigItem(
+        "Settings", "DpiScale", "Auto", OptionsValidator([1, 1.25, 1.5, 1.75, 2, "Auto"]), restart=True)
+    package = OptionsConfigItem(
         "Translation", "package", TranslationPackage.NONE, OptionsValidator(TranslationPackage), TranslationPackageSerializer(), restart=False)
 
 
