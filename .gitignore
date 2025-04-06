@@ -1,3 +1,4 @@
 ﻿resource/__pycache__
 config/config.json
 models/whisper
+models/argostranslate

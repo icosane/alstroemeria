@@ -2,7 +2,7 @@ import sys, os
 from PyQt6.QtGui import QFont, QColor, QIcon, QShortcut, QKeySequence, QPalette
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QLabel, QSizePolicy
 from PyQt6.QtCore import Qt, QObject, pyqtSignal, QThread, QMutex, pyqtSlot, QTranslator, QCoreApplication, QTimer, QEvent
-from qfluentwidgets import setThemeColor, ToolButton, TransparentToolButton, FluentIcon, PushSettingCard, isDarkTheme, ToolTipFilter, ToolTipPosition, SettingCard, MessageBox, FluentTranslator, IndeterminateProgressBar, InfoBadgePosition, DotInfoBadge, HeaderCardWidget, BodyLabel, IconWidget, InfoBarIcon, HyperlinkLabel, PushButton, SubtitleLabel, ComboBoxSettingCard, OptionsSettingCard, HyperlinkCard, ScrollArea, InfoBar, InfoBarPosition
+from qfluentwidgets import setThemeColor, ToolButton, TransparentToolButton, FluentIcon, PushSettingCard, isDarkTheme, ToolTipFilter, ToolTipPosition, SettingCard, MessageBox, FluentTranslator, IndeterminateProgressBar, InfoBadgePosition, DotInfoBadge, HeaderCardWidget, BodyLabel, IconWidget, InfoBarIcon, HyperlinkLabel, PushButton, SubtitleLabel, ComboBoxSettingCard, OptionsSettingCard, HyperlinkCard, ScrollArea, InfoBar, InfoBarPosition, StrongBodyLabel, TitleLabel
 from winrt.windows.ui.viewmanagement import UISettings, UIColorType
 from resource.config import cfg, QConfig
 from resource.model_utils import update_model, update_device
@@ -435,6 +435,9 @@ class MainWindow(QMainWindow):
         back_button_layout.addWidget(self.settings_title, alignment=Qt.AlignmentFlag.AlignTop)
 
         card_layout = QVBoxLayout()
+        self.devices_title = StrongBodyLabel(QCoreApplication.translate("MainWindow", "Devices"))
+        self.devices_title.setTextColor(QColor(0, 0, 0), QColor(255, 255, 255))
+        card_layout.addWidget(self.devices_title, alignment=Qt.AlignmentFlag.AlignTop)
         
         self.card_device = SettingCard(
             icon=InfoBarIcon.SUCCESS if get_cuda_device_count() > 0 else InfoBarIcon.ERROR,
@@ -461,6 +464,11 @@ class MainWindow(QMainWindow):
 
         cfg.device.valueChanged.connect(self.device_changed.emit)
 
+        self.modelsins_title = StrongBodyLabel(QCoreApplication.translate("MainWindow", "Model management"))
+        self.modelsins_title.setTextColor(QColor(0, 0, 0), QColor(255, 255, 255))
+        card_layout.addSpacing(20)
+        card_layout.addWidget(self.modelsins_title, alignment=Qt.AlignmentFlag.AlignTop)
+
         self.card_setmodel = ComboBoxSettingCard(
             configItem=cfg.model,
             icon=FluentIcon.CLOUD_DOWNLOAD,
@@ -475,8 +483,8 @@ class MainWindow(QMainWindow):
         self.card_settlpackage = ComboBoxSettingCard(
             configItem=cfg.package,
             icon=FluentIcon.CLOUD_DOWNLOAD,
-            title=QCoreApplication.translate("MainWindow","Argos Translate Model"),
-            content=QCoreApplication.translate("MainWindow", "Change Argos translate model"),
+            title=QCoreApplication.translate("MainWindow","Argos Translate package"),
+            content=QCoreApplication.translate("MainWindow", "Change translation package"),
             texts=[
                 "None", "sq_en", "ar_en", "az_en", "eu_en", "bn_en", "bg_en", "ca_en", "zh_tw_en", "zh_en", 
                 "cs_en", "da_en", "nl_en", "en_sq", "en_ar", "en_az", "en_eu", "en_bn", "en_bg", 
@@ -494,6 +502,11 @@ class MainWindow(QMainWindow):
 
         card_layout.addWidget(self.card_settlpackage, alignment=Qt.AlignmentFlag.AlignTop)
         cfg.package.valueChanged.connect(self.package_changed.emit)
+
+        self.modelsdel_title = StrongBodyLabel(QCoreApplication.translate("MainWindow", "Model removal"))
+        self.modelsdel_title.setTextColor(QColor(0, 0, 0), QColor(255, 255, 255))
+        card_layout.addSpacing(20)
+        card_layout.addWidget(self.modelsdel_title, alignment=Qt.AlignmentFlag.AlignTop)
 
         self.card_deletemodel = PushSettingCard(
             text=QCoreApplication.translate("MainWindow","Remove"),
@@ -518,6 +531,11 @@ class MainWindow(QMainWindow):
         self.card_deleteargosmodel.clicked.connect(self.packageremover)
         if ((cfg.get(cfg.package).value == 'None')):
             self.card_deleteargosmodel.button.setDisabled(True)
+
+        self.miscellaneous_title = StrongBodyLabel(QCoreApplication.translate("MainWindow", "Miscellaneous"))
+        self.miscellaneous_title.setTextColor(QColor(0, 0, 0), QColor(255, 255, 255))
+        card_layout.addSpacing(20)
+        card_layout.addWidget(self.miscellaneous_title, alignment=Qt.AlignmentFlag.AlignTop)
 
         self.card_setlanguage = ComboBoxSettingCard(
             configItem=cfg.language,
