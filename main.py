@@ -1,17 +1,16 @@
 import sys, os
-from PyQt6.QtGui import QFont, QColor, QIcon, QShortcut, QKeySequence, QPalette
+from PyQt6.QtGui import QColor, QIcon
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QLabel, QSizePolicy
-from PyQt6.QtCore import Qt, QObject, pyqtSignal, QThread, QMutex, pyqtSlot, QTranslator, QCoreApplication, QTimer, QEvent
-from qfluentwidgets import setThemeColor, ToolButton, TransparentToolButton, FluentIcon, PushSettingCard, isDarkTheme, ToolTipFilter, ToolTipPosition, SettingCard, MessageBox, FluentTranslator, IndeterminateProgressBar, InfoBadgePosition, DotInfoBadge, HeaderCardWidget, BodyLabel, IconWidget, InfoBarIcon, HyperlinkLabel, PushButton, SubtitleLabel, ComboBoxSettingCard, OptionsSettingCard, HyperlinkCard, ScrollArea, InfoBar, InfoBarPosition, StrongBodyLabel, TitleLabel, Flyout, FlyoutAnimationType
+from PyQt6.QtCore import Qt, pyqtSignal, QTranslator, QCoreApplication, QTimer
+from qfluentwidgets import setThemeColor, TransparentToolButton, FluentIcon, PushSettingCard, isDarkTheme, SettingCard, MessageBox, FluentTranslator, IndeterminateProgressBar, HeaderCardWidget, BodyLabel, IconWidget, InfoBarIcon, PushButton, SubtitleLabel, ComboBoxSettingCard, OptionsSettingCard, HyperlinkCard, ScrollArea, InfoBar, InfoBarPosition, StrongBodyLabel, Flyout, FlyoutAnimationType
 from winrt.windows.ui.viewmanagement import UISettings, UIColorType
-from resource.config import cfg, QConfig
+from resource.config import cfg
 from resource.model_utils import update_model, update_device
-from resource.subtitle_creator import SubtitleCreator, ModelLoader, AudioExtractorThread, TranscriptionWorker
+from resource.subtitle_creator import SubtitleCreator
 from resource.srt_translator import SRTTranslator
 from resource.argos_utils import update_package
-import shutil, psutil
+import shutil
 import traceback, gc
-from faster_whisper import WhisperModel
 import tempfile
 from ctranslate2 import get_cuda_device_count
 import glob
@@ -796,8 +795,8 @@ class MainWindow(QMainWindow):
 
     def start_translation_process(self, file_path):
         """Delegate to srt translator"""
-        self.subtitle_creator.unload_model()
         self.srt_translator.start_subtitle_process(file_path)
+        
 
     def handle_save_path_request(self, transcription):
         """Handle save path request in main thread"""
@@ -820,6 +819,7 @@ class MainWindow(QMainWindow):
             else:
                 self.subtitle_creator.transcription_worker.save_path = ""
                 self.subtitle_creator.transcription_worker.abort()
+                self.progressbar.stop()
 
     def handle_translation_save_path(self, default_name, translated_content):
         """Handle save path request in main thread"""
@@ -838,6 +838,7 @@ class MainWindow(QMainWindow):
             else:
                 self.srt_translator.translation_worker.save_path = ""
                 self.srt_translator.translation_worker.abort()
+                self.progressbar.stop()
 
     def on_transcription_done(self, result, success):
         """Handle transcription completion"""
@@ -974,6 +975,7 @@ class MainWindow(QMainWindow):
             #self.show_error_message(status)
             print(status)
             self.update_argos_remove_button_state(False)
+
 
 if __name__ == "__main__":
     if cfg.get(cfg.dpiScale) != "Auto":

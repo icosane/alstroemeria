@@ -73,7 +73,26 @@ class TranscriptionWorker(QThread):
 
     def run(self):
         try:
-            segments, _ = self.model.transcribe(self.audio_file)
+            #segments, _ = self.model.transcribe(self.audio_file, prompt_reset_on_temperature=0, vad_filter=True)
+            segments, _ = self.model.transcribe(
+                self.audio_file,
+                prompt_reset_on_temperature=0,
+                beam_size=5,
+                no_speech_threshold=0,
+                #patience=2,
+                condition_on_previous_text=True,
+                compression_ratio_threshold=None,
+                log_prob_threshold=None,
+                vad_filter=True,  # if your Whisper version supports it
+                vad_parameters=dict(
+                    #threshold=0.0045,
+                    threshold=0.1,  # best 0.2? def 0.5 
+                    min_speech_duration_ms=0,
+                    max_speech_duration_s=float("inf"),
+                    min_silence_duration_ms=2000,
+                    speech_pad_ms=700
+                )
+            )
             
             # Generate SRT formatted content
             srt_content = ""
@@ -167,20 +186,7 @@ class SubtitleCreator:
             self.model_loader.model_loaded.connect(self.on_model_ready)
             self.model_loader.start()
         else:
-            self.on_model_ready(self.model, self.cfg.get(self.cfg.model).value)
-
-    def unload_model(self):
-        """Explicitly unload the Whisper model from memory"""
-        if self.model is not None:
-            # Clean up any worker threads first
-            if hasattr(self, 'transcription_worker'):
-                self.transcription_worker.abort()
-                self.transcription_worker.deleteLater()
-            
-            # Explicitly delete the model
-            if self.model and self.model.model.model_is_loaded:
-                self.model.model.unload_model()
-                self.model = None
+            self.on_model_ready(self.model, self.cfg.get(self.cfg.model).value)       
 
     def on_model_ready(self, model, model_name):
         """When model is loaded/ready, transcribe the audio"""
