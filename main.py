@@ -2,7 +2,7 @@ import sys, os
 from PyQt6.QtGui import QFont, QColor, QIcon, QShortcut, QKeySequence, QPalette
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QLabel, QSizePolicy
 from PyQt6.QtCore import Qt, QObject, pyqtSignal, QThread, QMutex, pyqtSlot, QTranslator, QCoreApplication, QTimer, QEvent
-from qfluentwidgets import setThemeColor, ToolButton, TransparentToolButton, FluentIcon, PushSettingCard, isDarkTheme, ToolTipFilter, ToolTipPosition, SettingCard, MessageBox, FluentTranslator, IndeterminateProgressBar, InfoBadgePosition, DotInfoBadge, HeaderCardWidget, BodyLabel, IconWidget, InfoBarIcon, HyperlinkLabel, PushButton, SubtitleLabel, ComboBoxSettingCard, OptionsSettingCard, HyperlinkCard, ScrollArea, InfoBar, InfoBarPosition, StrongBodyLabel, TitleLabel
+from qfluentwidgets import setThemeColor, ToolButton, TransparentToolButton, FluentIcon, PushSettingCard, isDarkTheme, ToolTipFilter, ToolTipPosition, SettingCard, MessageBox, FluentTranslator, IndeterminateProgressBar, InfoBadgePosition, DotInfoBadge, HeaderCardWidget, BodyLabel, IconWidget, InfoBarIcon, HyperlinkLabel, PushButton, SubtitleLabel, ComboBoxSettingCard, OptionsSettingCard, HyperlinkCard, ScrollArea, InfoBar, InfoBarPosition, StrongBodyLabel, TitleLabel, Flyout, FlyoutAnimationType
 from winrt.windows.ui.viewmanagement import UISettings, UIColorType
 from resource.config import cfg, QConfig
 from resource.model_utils import update_model, update_device
@@ -242,7 +242,7 @@ class SelectedFileCard(HeaderCardWidget):
         self.file_name = os.path.basename(file_path)
         self.fileLabel = BodyLabel('<b>{}</b>'.format(self.file_name), self)
         self.successIcon = IconWidget(InfoBarIcon.SUCCESS, self)
-        self.infoLabel = BodyLabel('Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aenean at metus rutrum magna suscipit dapibus. Fusce magna odio, semper eget arcu sit amet, facilisis sollicitudin nulla. Vestibulum vitae ultrices nulla. In at tempus metus. Vestibulum non tortor eget erat varius gravida. Praesent ultricies tellus lacus, id mollis ante blandit ac. Proin nulla lectus, facilisis id consequat at, aliquet ut dui. Quisque non ornare neque. Donec nec ultrices enim. Suspendisse congue mauris orci, vitae varius nunc viverra at. ', self)
+        self.infoLabel = BodyLabel('If you want to create a voiceover based on translated subtitles, please select <b>"Keep"</b> when asked to keep the source audio file. The voiceover will use the same voice as the source file.<br><b>Please note: the voiceover is not available without source video.</b>', self)
         self.infoLabel.setWordWrap(True)
         #self.infoLabel.setAlignment(Qt.AlignmentFlag.AlignJustify)
         #self.infoLabel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -402,6 +402,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.filepicker)
 
         self.settings_button = TransparentToolButton(FluentIcon.SETTING)
+        self.faq_button = TransparentToolButton(FluentIcon.QUESTION)
 
         self.back_button = TransparentToolButton(FluentIcon.LEFT_ARROW)
         self.back_button.hide()
@@ -409,6 +410,7 @@ class MainWindow(QMainWindow):
         
         settings_layout = QHBoxLayout()
         settings_layout.addWidget(self.settings_button)
+        settings_layout.addWidget(self.faq_button)
         settings_layout.addWidget(self.back_button)
         settings_layout.addStretch()
         settings_layout.setContentsMargins(5, 5, 5, 5)
@@ -422,10 +424,22 @@ class MainWindow(QMainWindow):
         #connect
         self.settings_button.clicked.connect(self.settings_window)
         self.back_button.clicked.connect(self.return_to_filepicker)
+        self.faq_button.clicked.connect(self.showFlyout)
 
         main_widget = QWidget()
         main_widget.setLayout(main_layout)
         self.setCentralWidget(main_widget)
+
+    def showFlyout(self):
+        Flyout.create(
+            icon=None,
+            title='How to use',
+            content="Drag&Drop any video or .srt file in the window. <br><br> You will be presented with options to create subtitles, translate them, and make a voiceover based on translated subtitle file. <br><b>Please note, that in case of .srt file the voiceover option is not available as it is bound to the source file.</b> <br><br> Before using, please select your preferred Whisper model and translation languages in the Settings.",
+            target=self.faq_button,
+            parent=self,
+            isClosable=True,
+            aniType=FlyoutAnimationType.PULL_UP
+        )
 
     def return_to_filepicker(self):
         central_widget = self.centralWidget()
