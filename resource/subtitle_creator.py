@@ -79,17 +79,20 @@ class TranscriptionWorker(QThread):
                 prompt_reset_on_temperature=0,
                 beam_size=5,
                 no_speech_threshold=0,
-                #patience=2,
+                patience=2,
+                temperature=(0.0, 0.2),
+                suppress_tokens=[],
+                word_timestamps=True,
                 condition_on_previous_text=True,
                 compression_ratio_threshold=None,
                 log_prob_threshold=None,
-                vad_filter=True,  # if your Whisper version supports it
+                vad_filter=True,  # make selectable from ui
                 vad_parameters=dict(
                     #threshold=0.0045,
                     threshold=0.1,  # best 0.2? def 0.5 
-                    min_speech_duration_ms=0,
+                    min_speech_duration_ms=300,  # 0 10
                     max_speech_duration_s=float("inf"),
-                    min_silence_duration_ms=2000,
+                    min_silence_duration_ms=1000,  # def 2000
                     speech_pad_ms=700
                 )
             )
