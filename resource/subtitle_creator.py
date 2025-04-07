@@ -128,6 +128,7 @@ class SubtitleCreator:
         self.cfg = cfg
         self.model = None
         self.current_audio_file = None
+        self.model_loaded = False
 
     def start_subtitle_process(self, file_path):
         """Entry point for subtitle creation"""
@@ -167,6 +168,19 @@ class SubtitleCreator:
             self.model_loader.start()
         else:
             self.on_model_ready(self.model, self.cfg.get(self.cfg.model).value)
+
+    def unload_model(self):
+        """Explicitly unload the Whisper model from memory"""
+        if self.model is not None:
+            # Clean up any worker threads first
+            if hasattr(self, 'transcription_worker'):
+                self.transcription_worker.abort()
+                self.transcription_worker.deleteLater()
+            
+            # Explicitly delete the model
+            if self.model and self.model.model.model_is_loaded:
+                self.model.model.unload_model()
+                self.model = None
 
     def on_model_ready(self, model, model_name):
         """When model is loaded/ready, transcribe the audio"""

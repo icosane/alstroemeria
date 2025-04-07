@@ -1,6 +1,7 @@
 from enum import Enum
 import os, sys
 from pathlib import Path
+from ctranslate2 import get_cuda_device_count
 from PyQt6.QtCore import QLocale
 from faster_whisper import available_models
 from qfluentwidgets import (qconfig, QConfig, OptionsConfigItem, Theme,
@@ -29,7 +30,7 @@ class ArgosPathManager:
             "XDG_CACHE_HOME": str(Path(ARGOS_PACKAGES_DIR) / "cache"),
             "ARGOS_PACKAGES_DIR": str(Path(ARGOS_PACKAGES_DIR) / "data" / "argos-translate" / "packages"),
             "ARGOS_TRANSLATE_DATA_DIR": str(Path(ARGOS_PACKAGES_DIR) / "data"),
-            "ARGOS_DEVICE_TYPE": "cpu"
+            "ARGOS_DEVICE_TYPE": "cuda" if get_cuda_device_count() != 0 else "cpu"
         })
 
         # Create directories

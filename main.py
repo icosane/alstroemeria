@@ -7,6 +7,7 @@ from winrt.windows.ui.viewmanagement import UISettings, UIColorType
 from resource.config import cfg, QConfig
 from resource.model_utils import update_model, update_device
 from resource.subtitle_creator import SubtitleCreator, ModelLoader, AudioExtractorThread, TranscriptionWorker
+from resource.srt_translator import SRTTranslator
 from resource.argos_utils import update_package
 import shutil, psutil
 import traceback, gc
@@ -164,6 +165,11 @@ class _on_accepted_Widget(QWidget):
         self.main_window = main_window
         self.file_path = file_path
         self.is_srt = file_path.lower().endswith('.srt')
+
+        from_lang, to_lang, filename = self.langdetect(self.file_path)
+
+        self.is_translated_srt = (self.is_srt and 
+                             (f'_{from_lang}_{to_lang}' in filename))
         self.has_audio = False  # Track if audio file exists
         
         self.card_currentfile = SelectedFileCard(file_path)
@@ -176,6 +182,7 @@ class _on_accepted_Widget(QWidget):
         self.update_button_states()
 
         self.getsub.clicked.connect(self.start_subtitle_process)
+        self.gettl.clicked.connect(self.start_translation_process)
 
         self.button_layout.addWidget(self.getsub)
         self.button_layout.addWidget(self.gettl)
@@ -190,6 +197,10 @@ class _on_accepted_Widget(QWidget):
             self.getsub.setEnabled(True)
             self.gettl.setEnabled(False)
             self.vo.setEnabled(False)
+        elif self.is_translated_srt:
+            self.getsub.setEnabled(False)
+            self.gettl.setEnabled(False)
+            self.vo.setEnabled(self.has_audio)
         else:  # SRT file
             self.getsub.setEnabled(False)
             self.gettl.setEnabled(True)
@@ -203,10 +214,24 @@ class _on_accepted_Widget(QWidget):
     def start_subtitle_process(self):
         self.main_window.start_subtitle_process(self.file_path)
 
+    def start_translation_process(self):
+        self.main_window.start_translation_process(self.file_path)
+
+    def langdetect(self, filepath):
+        language_pair = cfg.get(cfg.package).value
+        from_lang, to_lang = language_pair.split('_')
+        filename = os.path.splitext(os.path.basename(filepath))[0].lower()
+
+        return [from_lang, to_lang, filename]
+
     def update_file(self, new_file_path):
         """Update the file path and button states"""
         self.file_path = new_file_path
         self.is_srt = new_file_path.lower().endswith('.srt')
+        from_lang, to_lang, filename = self.langdetect(new_file_path)
+
+        self.is_translated_srt = (self.is_srt and 
+                             (f'_{from_lang}_{to_lang}' in filename))
         self.card_currentfile.update_file(new_file_path)
         self.update_button_states()
 
@@ -274,6 +299,7 @@ class MainWindow(QMainWindow):
         self.package_changed.connect(lambda: update_package(self))
 
         self.subtitle_creator = SubtitleCreator(self, cfg)
+        self.srt_translator = SRTTranslator(self, cfg)
 
         QTimer.singleShot(100, self.init_check)
 
@@ -442,7 +468,7 @@ class MainWindow(QMainWindow):
         self.card_device = SettingCard(
             icon=InfoBarIcon.SUCCESS if get_cuda_device_count() > 0 else InfoBarIcon.ERROR,
             title=QCoreApplication.translate("MainWindow", "GPU availability"),
-            content=(QCoreApplication.translate("MainWindow", "Ready to use, select <b>cuda</b> in Device field")) if get_cuda_device_count() > 0 else (QCoreApplication.translate("MainWindow", "Unavailable"))
+            content=(QCoreApplication.translate("MainWindow", "Ready to use, select <b>cuda</b> in Device field")) if get_cuda_device_count() > 0 else (QCoreApplication.translate("MainWindow", "Unavailable. Application will run on CPU"))
         )
 
         card_layout.addWidget(self.card_device, alignment=Qt.AlignmentFlag.AlignTop)
@@ -512,7 +538,7 @@ class MainWindow(QMainWindow):
             text=QCoreApplication.translate("MainWindow","Remove"),
             icon=FluentIcon.BROOM,
             title=QCoreApplication.translate("MainWindow","Remove whisper model"),
-            content=QCoreApplication.translate("MainWindow", "Delete currently selected whisper model. Currently selected: <b>{}</b>").format(cfg.get(cfg.model).value),
+            content=QCoreApplication.translate("MainWindow", "Delete currently selected whisper model. Will be removed: <b>{}</b>").format(cfg.get(cfg.model).value),
         )
 
         card_layout.addWidget(self.card_deletemodel, alignment=Qt.AlignmentFlag.AlignTop)
@@ -524,7 +550,7 @@ class MainWindow(QMainWindow):
             text=QCoreApplication.translate("MainWindow","Remove"),
             icon=FluentIcon.BROOM,
             title=QCoreApplication.translate("MainWindow","Remove Argos Translate package"),
-            content=QCoreApplication.translate("MainWindow", "Delete currently selected translation package. Currently selected: <b>{}</b>").format(cfg.get(cfg.package).value),
+            content=QCoreApplication.translate("MainWindow", "Delete currently selected translation package. Will be removed: <b>{}</b>").format(cfg.get(cfg.package).value),
         )
 
         card_layout.addWidget(self.card_deleteargosmodel, alignment=Qt.AlignmentFlag.AlignTop)
@@ -754,12 +780,23 @@ class MainWindow(QMainWindow):
         """Delegate to subtitle creator"""
         self.subtitle_creator.start_subtitle_process(file_path)
 
+    def start_translation_process(self, file_path):
+        """Delegate to srt translator"""
+        self.subtitle_creator.unload_model()
+        self.srt_translator.start_subtitle_process(file_path)
+
     def handle_save_path_request(self, transcription):
         """Handle save path request in main thread"""
+        if hasattr(self.subtitle_creator, 'current_file_path'):
+            base_name = os.path.splitext(os.path.basename(self.subtitle_creator.current_file_path))[0]
+            default_name = f"{base_name}.srt"
+        else:
+            default_name = ""
+        
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Transcription", 
-            "", 
+            default_name,  # Use the video file name as default
             "Subtitle Files (*.srt)"
         )
         
@@ -769,6 +806,24 @@ class MainWindow(QMainWindow):
             else:
                 self.subtitle_creator.transcription_worker.save_path = ""
                 self.subtitle_creator.transcription_worker.abort()
+
+    def handle_translation_save_path(self, default_name, translated_content):
+        """Handle save path request in main thread"""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Translated Subtitles", 
+            default_name, 
+            "Subtitle Files (*.srt)"
+        )
+        
+        if hasattr(self.srt_translator, 'translation_worker'):
+            if file_path:
+                # Store both the path and ensure the worker has the content
+                self.srt_translator.translation_worker.save_path = file_path
+                self.srt_translator.translation_worker.translated_content = translated_content
+            else:
+                self.srt_translator.translation_worker.save_path = ""
+                self.srt_translator.translation_worker.abort()
 
     def on_transcription_done(self, result, success):
         """Handle transcription completion"""
@@ -796,6 +851,38 @@ class MainWindow(QMainWindow):
             error_box = MessageBox("Error", result, parent=self)
             error_box.cancelButton.hide()
             error_box.buttonLayout.insertStretch(1)
+
+    def on_translation_done(self, result, success):
+        """Handle translation completion"""
+        self.progressbar.stop()
+        
+        if success:
+            central_widget = self.centralWidget()
+            layout = central_widget.layout()
+            current_widget = layout.itemAt(0).widget()
+
+            if hasattr(current_widget, 'update_file'):
+                current_widget.update_file(result)
+
+            InfoBar.success(
+                title="Success",
+                content=f"Translation saved to {result}",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.BOTTOM,
+                duration=4000,
+                parent=self
+            )
+        elif result:  # Error message
+            InfoBar.error(
+                title="Error",
+                content=result,
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.BOTTOM,
+                duration=4000,
+                parent=self
+            )
 
     def handle_keep_audio(self, audio_file):
         """Show dialog asking if user wants to keep audio file"""
