@@ -51,7 +51,7 @@ class TranslationWorker(QThread):
             # Translate segments
             total_segments = len(segments)
             translated_segments = []
-            
+
             for i, (index, timecode, text) in enumerate(segments):
                 self._mutex.lock()
                 if self._abort:
@@ -66,32 +66,32 @@ class TranslationWorker(QThread):
 
             # Rebuild SRT content
             self.translated_content = self._rebuild_srt(translated_segments)
-            
+
             # Generate default filename and request save path
             base_name = os.path.splitext(os.path.basename(self.input_path))[0]
             default_name = f"{base_name}_{self.from_code}_{self.to_code}.srt"
-            
+
             # Request save path with both default name and content
             self._mutex.lock()
             self.request_save_path.emit(default_name, self.translated_content)
             self._mutex.unlock()
-            
+
             # Wait for save path or abort
             while not self._abort and not self.save_path:
                 self.msleep(100)
-            
+
             if self._abort:
                 return
-                
+
             if self.save_path:
                 # Ensure .srt extension
                 if not self.save_path.lower().endswith('.srt'):
                     self.save_path += '.srt'
-                    
+
                 # Save the file
                 with open(self.save_path, 'w', encoding='utf-8') as f:
                     f.write(self.translated_content)
-                
+
                 self.finished_signal.emit(self.save_path, True)
             else:
                 self.finished_signal.emit("", False)
@@ -103,7 +103,7 @@ class TranslationWorker(QThread):
         """Parse SRT content into segments (index, timecode, text)"""
         segments = []
         parts = content.strip().split('\n\n')
-        
+
         for part in parts:
             lines = part.split('\n')
             if len(lines) >= 3:
@@ -111,7 +111,7 @@ class TranslationWorker(QThread):
                 timecode = lines[1]
                 text = '\n'.join(lines[2:])
                 segments.append((index, timecode, text))
-        
+
         return segments
 
     def _rebuild_srt(self, segments):
@@ -141,21 +141,21 @@ class SRTTranslator:
                 parent=self.parent
             )
             return
-            
+
         self.current_file_path = file_path
         self.parent.progressbar.start()
-        
+
         if hasattr(self, 'translation_worker'):
             self.translation_worker.abort()
             self.translation_worker.deleteLater()
-        
+
         self.translate_file(file_path)
 
     def translate_file(self, file_path):
         """Start translation process"""
         lang_pair = self.cfg.get(self.cfg.package).value
         from_code, to_code = lang_pair.split('_')
-        
+
         self.translation_worker = TranslationWorker(file_path, from_code, to_code)
         self.translation_worker.request_save_path.connect(self.parent.handle_translation_save_path)
         self.translation_worker.finished_signal.connect(self.parent.on_translation_done)

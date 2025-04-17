@@ -1,8 +1,8 @@
 import sys, os
 from PyQt6.QtGui import QColor, QIcon
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QLabel, QSizePolicy
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QLabel
 from PyQt6.QtCore import Qt, pyqtSignal, QTranslator, QCoreApplication, QTimer
-from qfluentwidgets import setThemeColor, TransparentToolButton, FluentIcon, PushSettingCard, isDarkTheme, SettingCard, MessageBox, FluentTranslator, IndeterminateProgressBar, HeaderCardWidget, BodyLabel, IconWidget, InfoBarIcon, PushButton, SubtitleLabel, ComboBoxSettingCard, OptionsSettingCard, HyperlinkCard, ScrollArea, InfoBar, InfoBarPosition, StrongBodyLabel, Flyout, FlyoutAnimationType, SwitchSettingCard
+from qfluentwidgets import setThemeColor, TransparentToolButton, FluentIcon, PushSettingCard, isDarkTheme, SettingCard, MessageBox, FluentTranslator, IndeterminateProgressBar, HeaderCardWidget, BodyLabel, IconWidget, InfoBarIcon, PushButton, SubtitleLabel, ComboBoxSettingCard, OptionsSettingCard, HyperlinkCard, ScrollArea, InfoBar, InfoBarPosition, StrongBodyLabel, Flyout, FlyoutAnimationType
 from winrt.windows.ui.viewmanagement import UISettings, UIColorType
 from resource.config import cfg
 from resource.model_utils import update_model, update_device
@@ -48,7 +48,7 @@ else:
 
 if os.name == 'nt':
     import ctypes
-    myappid = u'icosane.alstroemeria.tlvo.100'  # arbitrary string
+    myappid = u'icosane.alstroemeria.build.100'  # arbitrary string
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 class FileLabel(QLabel):
@@ -66,22 +66,34 @@ class FileLabel(QLabel):
         ''')
         self.setAcceptDrops(True)
         self.deleted = False
-        
 
-    def create_text(self, color):
+
+    def create_text(self, color, lang):
         font_size = "16px"
-        return f'''
+        if lang == 'RUSSIAN':
+            text = f'''
+            <p style="text-align: center; font-size: {font_size}; color: {color};">
+                <br><br> Перетащите сюда любое видео или файл субтитров <br>
+                <br>или<br><br>
+                <a href="" style="color: {color};"><strong>Нажмите в любом месте, чтобы выбрать файл</strong></a>
+                <br>
+            </p>
+        '''
+        else:
+            text = f'''
             <p style="text-align: center; font-size: {font_size}; color: {color};">
                 <br><br> Drag & drop any video or subtitle file here <br>
-                <br>or<br><br> 
+                <br>or<br><br>
                 <a href="" style="color: {color};"><strong>Click anywhere to browse file</strong></a>
                 <br>
             </p>
         '''
+        return text
 
     def update_text_color(self):
         color = 'white' if isDarkTheme() else 'black'
-        return self.create_text(color)
+        lang = cfg.get(cfg.language).name
+        return self.create_text(color, lang)
 
     def update_theme(self):
         if not self.deleted:
@@ -89,18 +101,33 @@ class FileLabel(QLabel):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            # Open file dialog when "browse file" is clicked
             self.open_file_dialog()
 
     def open_file_dialog(self):
-        #options = QFileDialog.Option.UseNativeDialog
-        self.file_path, _ = QFileDialog.getOpenFileName(self, "Select a Video or Subtitle File", "", "Video/Subtitle Files (*.mp4 *.avi *.mov *.mkv *.flv *.wmv *.srt);;Video Files (*.mp4 *.avi *.mov *.mkv *.flv *.wmv);;Subtitle Files (*.srt);;All Files (*)")
+        self.file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            QCoreApplication.translate("MainWindow", "Select a Video or Subtitle File"),
+            "",
+            QCoreApplication.translate("MainWindow",
+                "Video/Subtitle Files (*.mp4 *.avi *.mov *.mkv *.flv *.wmv *.srt);;"
+                "Video Files (*.mp4 *.avi *.mov *.mkv *.flv *.wmv);;"
+                "Subtitle Files (*.srt);;"
+                "All Files (*)")
+        )
         if self.file_path:
             if self.is_video_file(self.file_path) or self.is_subtitle_file(self.file_path):
                 self.fileSelected.emit(self.file_path)
                 self.file_accepted(self.file_path)
             else:
-                print('Dropped file is not a video.')
+                InfoBar.error(
+                    title=QCoreApplication.translate("MainWindow", "Error"),
+                    content=QCoreApplication.translate("MainWindow", "Dropped file is not a video or .srt file"),
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.BOTTOM,
+                    duration=4000,
+                    parent=window
+                )
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
@@ -118,7 +145,15 @@ class FileLabel(QLabel):
                     self.fileSelected.emit(self.file_path)
                     self.file_accepted(self.file_path)
                 else:
-                    print('Dropped file is not a video.')
+                    InfoBar.error(
+                        title=QCoreApplication.translate("MainWindow", "Error"),
+                        content=QCoreApplication.translate("MainWindow", "Dropped file is not a video or .srt file"),
+                        orient=Qt.Orientation.Horizontal,
+                        isClosable=True,
+                        position=InfoBarPosition.BOTTOM,
+                        duration=4000,
+                        parent=window
+                    )
 
     def file_accepted(self, file_path):
         self.deleted = True
@@ -129,8 +164,8 @@ class FileLabel(QLabel):
             # Look for corresponding audio file
             base_name = os.path.splitext(os.path.basename(file_path))[0]
             temp_dir = tempfile.gettempdir()
-            audio_files = glob.glob(os.path.join(temp_dir, f"temp_audio_*.wav"))
-            
+            audio_files = glob.glob(os.path.join(temp_dir, "temp_audio_*.wav"))
+
             # Check if any audio file matches our SRT (by base name)
             has_audio = any(base_name in os.path.basename(audio) for audio in audio_files)
             new_widget.set_audio_state(has_audio)
@@ -148,13 +183,11 @@ class FileLabel(QLabel):
         self.main_window.back_button.show()
 
     def is_video_file(self, file_path):
-        # Check the file extension to determine if it's a video
         video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv']
         _, ext = os.path.splitext(file_path)
         return ext.lower() in video_extensions
 
     def is_subtitle_file(self, file_path):
-        # Check the file extension to determine if it's a video
         video_extensions = ['.srt']
         _, ext = os.path.splitext(file_path)
         return ext.lower() in video_extensions
@@ -169,16 +202,16 @@ class _on_accepted_Widget(QWidget):
 
         from_lang, to_lang, filename = self.langdetect(self.file_path)
 
-        self.is_translated_srt = (self.is_srt and 
+        self.is_translated_srt = (self.is_srt and
                              (f'_{from_lang}_{to_lang}' in filename))
         self.has_audio = False  # Track if audio file exists
-        
+
         self.card_currentfile = SelectedFileCard(file_path)
         self.layout.addWidget(self.card_currentfile)
         self.button_layout = QHBoxLayout()
-        self.getsub = PushButton(FluentIcon.FONT_SIZE, 'Create subtitles')
-        self.gettl = PushButton(FluentIcon.LANGUAGE, 'Translate')
-        self.vo = PushButton(FluentIcon.VOLUME, 'Voice over')
+        self.getsub = PushButton(FluentIcon.FONT_SIZE, QCoreApplication.translate('MainWindow', 'Create subtitles'))
+        self.gettl = PushButton(FluentIcon.LANGUAGE, QCoreApplication.translate('MainWindow', 'Translate'))
+        self.vo = PushButton(FluentIcon.VOLUME, QCoreApplication.translate('MainWindow', 'Voice over'))
 
         self.update_button_states()
 
@@ -235,7 +268,7 @@ class _on_accepted_Widget(QWidget):
         self.is_srt = new_file_path.lower().endswith('.srt')
         from_lang, to_lang, filename = self.langdetect(new_file_path)
 
-        self.is_translated_srt = (self.is_srt and 
+        self.is_translated_srt = (self.is_srt and
                              (f'_{from_lang}_{to_lang}' in filename))
         self.card_currentfile.update_file(new_file_path)
         self.update_button_states()
@@ -243,14 +276,12 @@ class _on_accepted_Widget(QWidget):
 class SelectedFileCard(HeaderCardWidget):
     def __init__(self, file_path, parent=None):
         super().__init__(parent)
-        self.setTitle('Selected file')
+        self.setTitle(QCoreApplication.translate('MainWindow','Selected file'))
         self.file_name = os.path.basename(file_path)
         self.fileLabel = BodyLabel('<b>{}</b>'.format(self.file_name), self)
         self.successIcon = IconWidget(InfoBarIcon.SUCCESS, self)
-        self.infoLabel = BodyLabel('If you want to create a voiceover based on translated subtitles, please select <b>"Keep"</b> when asked to keep the source audio file. The voiceover will use the same voice as the source file.<br><b>Please note: the voiceover is not available without source video.</b>', self)
+        self.infoLabel = BodyLabel(QCoreApplication.translate('MainWindow', 'If you want to create a voiceover based on translated subtitles, please select <b>"Keep"</b> when asked to keep the source audio file. The voiceover will use the same voice as the source file.<br><b>Please note: the voiceover is not available without source video.</b>'), self)
         self.infoLabel.setWordWrap(True)
-        #self.infoLabel.setAlignment(Qt.AlignmentFlag.AlignJustify)
-        #self.infoLabel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         self._layout = QVBoxLayout()
         self.hint_layout = QHBoxLayout()
@@ -269,8 +300,6 @@ class SelectedFileCard(HeaderCardWidget):
 
         self.button_layout = QHBoxLayout()
         self.button_layout.addWidget(self.infoLabel)
-        
-        #self.button_layout.addStretch()
 
         self._layout.addLayout(self.button_layout)
 
@@ -291,7 +320,7 @@ class MainWindow(QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent=parent)
         self.setWindowTitle(QCoreApplication.translate("MainWindow", "alstroemeria"))
-        #self.setWindowIcon(QIcon(os.path.join(res_dir, "resource", "assets", "icon.ico")))
+        self.setWindowIcon(QIcon(os.path.join(res_dir, "resource", "assets", "icon.ico")))
         self.setGeometry(100,100,999,446)
         self.main_layout()
         self.setup_theme()
@@ -332,13 +361,14 @@ class MainWindow(QMainWindow):
         if (get_cuda_device_count() == 0) and ((cfg.get(cfg.device).value == 'cuda')):
             InfoBar.info(
                 title=(QCoreApplication.translate("MainWindow", "Information")),
-                content=(QCoreApplication.translate("MainWindow", "<b>Your device does not have an NVIDIA graphics card</b>. Please go to Settings and switch the device to <b>cpu</b>.")),
+                content=(QCoreApplication.translate("MainWindow", "<b>Your device does not have an NVIDIA graphics card</b>. Application will run on CPU.")),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=False,
                 position=InfoBarPosition.BOTTOM,
                 duration=4000,
                 parent=window
             )
+            cfg.set(cfg.device, 'cpu')
 
     def setup_theme(self):
         main_color_hex = self.get_main_color_hex()
@@ -419,8 +449,8 @@ class MainWindow(QMainWindow):
 
         self.back_button = TransparentToolButton(FluentIcon.LEFT_ARROW)
         self.back_button.hide()
-        
-        
+
+
         settings_layout = QHBoxLayout()
         settings_layout.addWidget(self.settings_button)
         settings_layout.addWidget(self.faq_button)
@@ -430,7 +460,6 @@ class MainWindow(QMainWindow):
 
         self.progressbar = IndeterminateProgressBar(start=False)
         main_layout.addWidget(self.progressbar)
-        #self.progressbar.hide()
 
         main_layout.addLayout(settings_layout)
 
@@ -446,8 +475,8 @@ class MainWindow(QMainWindow):
     def showFlyout(self):
         Flyout.create(
             icon=None,
-            title='How to use',
-            content="Drag&Drop any video or .srt file in the window. <br><br> You will be presented with options to create subtitles, translate them, and make a voiceover based on translated subtitle file. <br><b>Please note, that in case of .srt file the voiceover option is not available as it is bound to the source file.</b> <br><br> Before using, please select your preferred Whisper model and translation languages in the Settings.",
+            title=QCoreApplication.translate('MainWindow','How to use'),
+            content=QCoreApplication.translate('MainWindow',"Drag&Drop any video or .srt file in the window. <br><br> You will be presented with options to create subtitles, translate them, and make a voiceover based on translated subtitle file. <br><b>Please note, that in case of .srt file the voiceover option is not available as it is bound to the source file.</b> <br><br> Before using, please select your preferred Whisper model and translation languages in the Settings."),
             target=self.faq_button,
             parent=self,
             isClosable=True,
@@ -457,22 +486,22 @@ class MainWindow(QMainWindow):
     def return_to_filepicker(self):
         central_widget = self.centralWidget()
         layout = central_widget.layout()
-        
+
         # Find the current file widget (should be at index 0)
         current_widget = layout.itemAt(0).widget()
-        
+
         # Remove the current widget
         layout.removeWidget(current_widget)
         current_widget.deleteLater()
-        
+
         # Add back the file picker
         self.filepicker = FileLabel(self)
         layout.insertWidget(0, self.filepicker)
-        
+
         # Hide the back button
         self.back_button.hide()
 
-    def settings_layout(self):        
+    def settings_layout(self):
         settings_layout = QVBoxLayout()
 
         # Create a horizontal layout for the back button
@@ -491,7 +520,7 @@ class MainWindow(QMainWindow):
         self.devices_title = StrongBodyLabel(QCoreApplication.translate("MainWindow", "Devices"))
         self.devices_title.setTextColor(QColor(0, 0, 0), QColor(255, 255, 255))
         card_layout.addWidget(self.devices_title, alignment=Qt.AlignmentFlag.AlignTop)
-        
+
         self.card_device = SettingCard(
             icon=InfoBarIcon.SUCCESS if get_cuda_device_count() > 0 else InfoBarIcon.ERROR,
             title=QCoreApplication.translate("MainWindow", "GPU availability"),
@@ -539,16 +568,16 @@ class MainWindow(QMainWindow):
             title=QCoreApplication.translate("MainWindow","Argos Translate package"),
             content=QCoreApplication.translate("MainWindow", "Change translation package"),
             texts=[
-                "None", "sq_en", "ar_en", "az_en", "eu_en", "bn_en", "bg_en", "ca_en", "zh_tw_en", "zh_en", 
-                "cs_en", "da_en", "nl_en", "en_sq", "en_ar", "en_az", "en_eu", "en_bn", "en_bg", 
-                "en_ca", "en_zh", "en_zh_tw", "en_cs", "en_da", "en_nl", "en_eo", "en_et", "en_fi", 
-                "en_fr", "en_gl", "en_de", "en_el", "en_he", "en_hi", "en_hu", "en_id", "en_ga", 
-                "en_it", "en_ja", "en_ko", "en_lv", "en_lt", "en_ms", "en_no", "en_fa", "en_pl", 
-                "en_pt", "en_pt_br", "en_ro", "en_ru", "en_sk", "en_sl", "en_es", "en_sv", "en_tl", 
-                "en_th", "en_tr", "en_uk", "en_ur", "eo_en", "et_en", "fi_en", "fr_en", "gl_en", 
-                "de_en", "el_en", "he_en", "hi_en", "hu_en", "id_en", "ga_en", "it_en", "ja_en", 
-                "ko_en", "lv_en", "lt_en", "ms_en", "no_en", "fa_en", "pl_en", "pt_br_en", "pt_en", 
-                "pt_es", "ro_en", "ru_en", "sk_en", "sl_en", "es_en", "es_pt", "sv_en", "tl_en", 
+                "None", "sq_en", "ar_en", "az_en", "eu_en", "bn_en", "bg_en", "ca_en", "zh_tw_en", "zh_en",
+                "cs_en", "da_en", "nl_en", "en_sq", "en_ar", "en_az", "en_eu", "en_bn", "en_bg",
+                "en_ca", "en_zh", "en_zh_tw", "en_cs", "en_da", "en_nl", "en_eo", "en_et", "en_fi",
+                "en_fr", "en_gl", "en_de", "en_el", "en_he", "en_hi", "en_hu", "en_id", "en_ga",
+                "en_it", "en_ja", "en_ko", "en_lv", "en_lt", "en_ms", "en_no", "en_fa", "en_pl",
+                "en_pt", "en_pt_br", "en_ro", "en_ru", "en_sk", "en_sl", "en_es", "en_sv", "en_tl",
+                "en_th", "en_tr", "en_uk", "en_ur", "eo_en", "et_en", "fi_en", "fr_en", "gl_en",
+                "de_en", "el_en", "he_en", "hi_en", "hu_en", "id_en", "ga_en", "it_en", "ja_en",
+                "ko_en", "lv_en", "lt_en", "ms_en", "no_en", "fa_en", "pl_en", "pt_br_en", "pt_en",
+                "pt_es", "ro_en", "ru_en", "sk_en", "sl_en", "es_en", "es_pt", "sv_en", "tl_en",
                 "th_en", "tr_en", "uk_en", "ur_en"
             ]
         )
@@ -651,11 +680,11 @@ class MainWindow(QMainWindow):
         cfg.dpiScale.valueChanged.connect(self.restartinfo)
 
         self.card_ab = HyperlinkCard(
-            url="https://example.com",
+            url="https://github.com/icosane/alstroemeria",
             text="Github",
             icon=FluentIcon.INFO,
             title=QCoreApplication.translate("MainWindow", "About"),
-            content=QCoreApplication.translate("MainWindow", "lorem ipsum?")
+            content=QCoreApplication.translate("MainWindow", "Create and translate subtitles for any video, with the ability to make a voiceover.")
         )
         card_layout.addWidget(self.card_ab,  alignment=Qt.AlignmentFlag.AlignTop )
 
@@ -672,17 +701,17 @@ class MainWindow(QMainWindow):
 
         self.download_progressbar = IndeterminateProgressBar(start=False)
         settings_layout.addWidget(self.download_progressbar )
-        #self.download_progressbar.hide()
 
         settings_widget = QWidget()
         settings_widget.setLayout(settings_layout)
 
         return settings_widget
-    
+
     def settings_window(self):
         if not hasattr(self, "settings_win") or self.settings_win is None:
             self.settings_win = self.settings_layout()
-            self.settings_win.setWindowTitle("Settings")
+            self.settings_win.setWindowTitle(QCoreApplication.translate('MainWindow',"Settings"))
+            self.settings_win.setWindowIcon(QIcon(os.path.join(res_dir, "resource", "assets", "icon.ico")))
             self.settings_win.setGeometry(100,100,660,776)
             self.settings_win.setMinimumSize(677,908)
 
@@ -702,7 +731,7 @@ class MainWindow(QMainWindow):
 
                 InfoBar.success(
                     title=QCoreApplication.translate("MainWindow", "Success"),
-                    content=QCoreApplication.translate("MainWindow", "Model removed"),
+                    content=QCoreApplication.translate("MainWindow", "Whisper model removed"),
                     orient=Qt.Orientation.Horizontal,
                     isClosable=True,
                     position=InfoBarPosition.TOP_RIGHT,
@@ -712,7 +741,7 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 InfoBar.error(
                     title=QCoreApplication.translate("MainWindow", "Error"),
-                    content=QCoreApplication.translate("MainWindow", f"Failed to remove the model: {e}"),
+                    content=QCoreApplication.translate("MainWindow", f"Failed to remove the whisper model: {e}"),
                     orient=Qt.Orientation.Horizontal,
                     isClosable=True,
                     position=InfoBarPosition.TOP_RIGHT,
@@ -722,7 +751,7 @@ class MainWindow(QMainWindow):
 
     def packageremover(self):
         language_pair = cfg.get(cfg.package).value
-        
+
         package_pattern = os.path.join(
             base_dir,
             "models/argostranslate/data/argos-translate/packages",
@@ -743,20 +772,20 @@ class MainWindow(QMainWindow):
                 if os.path.isdir(dir_path):
                     shutil.rmtree(dir_path)
                     removed_dirs = True
-            
+
             # Remove model file if exists
             removed_file = False
             if os.path.exists(model_file):
                 os.remove(model_file)
                 removed_file = True
-            
+
             # Only update config if we actually removed something
             if removed_dirs or removed_file:
                 cfg.set(cfg.package, 'None')
-                
+
                 InfoBar.success(
                     title=QCoreApplication.translate("MainWindow", "Success"),
-                    content=QCoreApplication.translate("MainWindow", "Model removed successfully"),
+                    content=QCoreApplication.translate("MainWindow", "Translation package removed successfully"),
                     orient=Qt.Orientation.Horizontal,
                     isClosable=True,
                     position=InfoBarPosition.TOP_RIGHT,
@@ -766,7 +795,7 @@ class MainWindow(QMainWindow):
             else:
                 InfoBar.warning(
                     title=QCoreApplication.translate("MainWindow", "Warning"),
-                    content=QCoreApplication.translate("MainWindow", "No model found to remove"),
+                    content=QCoreApplication.translate("MainWindow", "No translation package found to remove"),
                     orient=Qt.Orientation.Horizontal,
                     isClosable=True,
                     position=InfoBarPosition.TOP_RIGHT,
@@ -777,7 +806,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             InfoBar.error(
                 title=QCoreApplication.translate("MainWindow", "Error"),
-                content=QCoreApplication.translate("MainWindow", f"Failed to remove model: {str(e)}"),
+                content=QCoreApplication.translate("MainWindow", f"Failed to remove translation package: {str(e)}"),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP_RIGHT,
@@ -796,7 +825,7 @@ class MainWindow(QMainWindow):
 
                 InfoBar.success(
                     title=QCoreApplication.translate("MainWindow", "Success"),
-                    content=QCoreApplication.translate("MainWindow", "Model removed"),
+                    content=QCoreApplication.translate("MainWindow", "TTS model removed"),
                     orient=Qt.Orientation.Horizontal,
                     isClosable=True,
                     position=InfoBarPosition.TOP_RIGHT,
@@ -806,7 +835,7 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 InfoBar.error(
                     title=QCoreApplication.translate("MainWindow", "Error"),
-                    content=QCoreApplication.translate("MainWindow", f"Failed to remove the model: {e}"),
+                    content=QCoreApplication.translate("MainWindow", f"Failed to remove the TTS model: {e}"),
                     orient=Qt.Orientation.Horizontal,
                     isClosable=True,
                     position=InfoBarPosition.TOP_RIGHT,
@@ -819,7 +848,7 @@ class MainWindow(QMainWindow):
             self.download_progressbar.start()
             InfoBar.info(
                 title=QCoreApplication.translate("MainWindow", "Information"),
-                content=QCoreApplication.translate("MainWindow", "Model download started. Please wait for it to finish"),
+                content=QCoreApplication.translate("MainWindow", "Whisper model download started. Please wait for it to finish"),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP_RIGHT,
@@ -834,7 +863,7 @@ class MainWindow(QMainWindow):
             self.download_progressbar.stop()
             InfoBar.success(
                 title=QCoreApplication.translate("MainWindow", "Success"),
-                content=QCoreApplication.translate("MainWindow", "Model successfully downloaded"),
+                content=QCoreApplication.translate("MainWindow", "Whisper model successfully downloaded"),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP_RIGHT,
@@ -847,7 +876,7 @@ class MainWindow(QMainWindow):
         else:
             InfoBar.error(
                 title=QCoreApplication.translate("MainWindow", "Error"),
-                content=QCoreApplication.translate("MainWindow", f"Failed to download model: {status}"),
+                content=QCoreApplication.translate("MainWindow", f"Failed to download whisper model: {status}"),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP_RIGHT,
@@ -861,7 +890,7 @@ class MainWindow(QMainWindow):
             self.download_progressbar.start()
             InfoBar.info(
                 title=QCoreApplication.translate("MainWindow", "Information"),
-                content=QCoreApplication.translate("MainWindow", "TTS Model download started. Please wait for it to finish"),
+                content=QCoreApplication.translate("MainWindow", "TTS model download started. Please wait for it to finish"),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP_RIGHT,
@@ -876,7 +905,7 @@ class MainWindow(QMainWindow):
             self.download_progressbar.stop()
             InfoBar.success(
                 title=QCoreApplication.translate("MainWindow", "Success"),
-                content=QCoreApplication.translate("MainWindow", "Model successfully downloaded"),
+                content=QCoreApplication.translate("MainWindow", "TTS model successfully downloaded"),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP_RIGHT,
@@ -889,7 +918,7 @@ class MainWindow(QMainWindow):
         else:
             InfoBar.error(
                 title=QCoreApplication.translate("MainWindow", "Error"),
-                content=QCoreApplication.translate("MainWindow", f"Failed to download model: {status}"),
+                content=QCoreApplication.translate("MainWindow", f"Failed to download TTS model: {status}"),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP_RIGHT,
@@ -905,7 +934,7 @@ class MainWindow(QMainWindow):
     def start_translation_process(self, file_path):
         """Delegate to srt translator"""
         self.srt_translator.start_subtitle_process(file_path)
-        
+
 
     def handle_save_path_request(self, transcription):
         """Handle save path request in main thread"""
@@ -914,14 +943,14 @@ class MainWindow(QMainWindow):
             default_name = f"{base_name}.srt"
         else:
             default_name = ""
-        
+
         file_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Save Transcription", 
+            QCoreApplication.translate('MainWindow',"Save Transcription"),
             default_name,  # Use the video file name as default
-            "Subtitle Files (*.srt)"
+            QCoreApplication.translate('MainWindow',"Subtitle Files (*.srt)")
         )
-        
+
         if hasattr(self.subtitle_creator, 'transcription_worker'):
             if file_path:
                 self.subtitle_creator.transcription_worker.save_path = file_path
@@ -934,11 +963,11 @@ class MainWindow(QMainWindow):
         """Handle save path request in main thread"""
         file_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Save Translated Subtitles", 
-            default_name, 
-            "Subtitle Files (*.srt)"
+            QCoreApplication.translate('MainWindow',"Save Translated Subtitles"),
+            default_name,
+            QCoreApplication.translate('MainWindow',"Subtitle Files (*.srt)")
         )
-        
+
         if hasattr(self.srt_translator, 'translation_worker'):
             if file_path:
                 # Store both the path and ensure the worker has the content
@@ -952,7 +981,7 @@ class MainWindow(QMainWindow):
     def on_transcription_done(self, result, success):
         """Handle transcription completion"""
         self.progressbar.stop()
-        
+
         if success:
             central_widget = self.centralWidget()
             layout = central_widget.layout()
@@ -963,8 +992,8 @@ class MainWindow(QMainWindow):
                 current_widget.set_audio_state(False)
 
             InfoBar.success(
-                title="Success",
-                content=f"Transcription saved to {result}",
+                title=QCoreApplication.translate('MainWindow',"Success"),
+                content=QCoreApplication.translate('MainWindow', "Transcription saved to <b>{}</b>").format(result),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.BOTTOM,
@@ -972,14 +1001,14 @@ class MainWindow(QMainWindow):
                 parent=self
             )
         elif result:  # Error message
-            error_box = MessageBox("Error", result, parent=self)
+            error_box = MessageBox(QCoreApplication.translate('MainWindow',"Error"), result, parent=self)
             error_box.cancelButton.hide()
             error_box.buttonLayout.insertStretch(1)
 
     def on_translation_done(self, result, success):
         """Handle translation completion"""
         self.progressbar.stop()
-        
+
         if success:
             central_widget = self.centralWidget()
             layout = central_widget.layout()
@@ -989,8 +1018,8 @@ class MainWindow(QMainWindow):
                 current_widget.update_file(result)
 
             InfoBar.success(
-                title="Success",
-                content=f"Translation saved to {result}",
+                title=QCoreApplication.translate('MainWindow',"Success"),
+                content=QCoreApplication.translate('MainWindow', "Translation saved to <b>{}</b>").format(result),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.BOTTOM,
@@ -999,7 +1028,7 @@ class MainWindow(QMainWindow):
             )
         elif result:  # Error message
             InfoBar.error(
-                title="Error",
+                title=QCoreApplication.translate('MainWindow',"Error"),
                 content=result,
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
@@ -1016,16 +1045,16 @@ class MainWindow(QMainWindow):
         current_widget = layout.itemAt(0).widget()
 
         box = MessageBox(
-            "Keep audio file?",
-            "Do you want to keep the extracted audio file?",
+            QCoreApplication.translate('MainWindow',"Keep audio file?"),
+            QCoreApplication.translate('MainWindow',"Do you want to keep the extracted audio file?"),
             self
         )
-        box.yesButton.setText("Keep")
-        box.cancelButton.setText("Delete")
-        
+        box.yesButton.setText(QCoreApplication.translate('MainWindow',"Keep"))
+        box.cancelButton.setText(QCoreApplication.translate('MainWindow',"Delete"))
+
         # Store the result before checking
         result = box.exec()
-        
+
         if result == 1:  # 1 is the value for yesSignal
             if hasattr(current_widget, 'set_audio_state'):
                 current_widget.set_audio_state(True)
@@ -1037,17 +1066,17 @@ class MainWindow(QMainWindow):
                     current_widget.set_audio_state(False)
             except Exception as e:
                 InfoBar.error(
-                    title="Error",
+                    title=QCoreApplication.translate('MainWindow',"Error"),
                     content=f"Failed to delete audio file: {e}",
                     parent=self
                 )
-            
+
     def update_vo_button_state(self, enabled):
         """Update the Voice Over button state in the current widget"""
         central_widget = self.centralWidget()
         layout = central_widget.layout()
         current_widget = layout.itemAt(0).widget()
-        
+
         if hasattr(current_widget, 'vo'):
             current_widget.vo.setEnabled(enabled)
 
@@ -1061,7 +1090,7 @@ class MainWindow(QMainWindow):
         """Clean up temp files when closing the app"""
         temp_dir = tempfile.gettempdir()
         temp_files = glob.glob(os.path.join(temp_dir, "temp_audio_*.wav"))
-        
+
         for file in temp_files:
             try:
                 os.remove(file)
@@ -1070,15 +1099,14 @@ class MainWindow(QMainWindow):
 
         for widget in QApplication.topLevelWidgets():
             widget.close()
-        
+
         super().closeEvent(event)
 
     def on_package_download_finished(self, status):
         if status == "start":
-            #print(f"Downloading {cfg.get(cfg.package).value} package")
             InfoBar.info(
                 title=QCoreApplication.translate("MainWindow", "Information"),
-                content=QCoreApplication.translate("MainWindow", f"Downloading {cfg.get(cfg.package).value} package"),
+                content=QCoreApplication.translate("MainWindow", "Downloading {} package").format(cfg.get(cfg.package).value),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP_RIGHT,
@@ -1087,10 +1115,9 @@ class MainWindow(QMainWindow):
             )
             self.update_argos_remove_button_state(False)
         elif status == "success":
-            #print("Package installed successfully!")
             InfoBar.success(
-                title="Success",
-                content=f"Package installed successfully!",
+                title=QCoreApplication.translate("MainWindow", "Success"),
+                content=QCoreApplication.translate("MainWindow", "Package installed successfully!"),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP_RIGHT,
@@ -1099,19 +1126,26 @@ class MainWindow(QMainWindow):
             )
             self.update_argos_remove_button_state(True)
         elif status.startswith("error"):
-            #self.show_error_message(status)
-            print(status)
+            InfoBar.error(
+                title=QCoreApplication.translate("MainWindow", "Error"),
+                content=status,
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=4000,
+                parent=self.settings_win
+            )
             self.update_argos_remove_button_state(False)
 
     def handle_vo_save_path(self, default_name):
         """Handle save path request for voiceover files"""
         file_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Save Voiceover", 
+            QCoreApplication.translate("MainWindow", "Save Voiceover"),
             default_name,
-            "Audio Files (*.wav)"
+            QCoreApplication.translate("MainWindow", "Audio Files (*.wav)")
         )
-        
+
         if hasattr(self.vo_creator, 'vo_worker'):
             if file_path:
                 self.vo_creator.vo_worker.save_path = file_path
@@ -1123,11 +1157,11 @@ class MainWindow(QMainWindow):
     def on_vo_done(self, result, success):
         """Handle voiceover completion"""
         self.progressbar.stop()
-        
+
         if success:
             InfoBar.success(
-                title="Success",
-                content=f"Voiceover saved to {result}",
+                title=QCoreApplication.translate("MainWindow", "Success"),
+                content=QCoreApplication.translate("MainWindow", "Voiceover saved to {}").format(result),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.BOTTOM,
@@ -1136,7 +1170,7 @@ class MainWindow(QMainWindow):
             )
         elif result:  # Error message
             InfoBar.error(
-                title="Error",
+                title=QCoreApplication.translate("MainWindow", "Error"),
                 content=result,
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
@@ -1145,21 +1179,21 @@ class MainWindow(QMainWindow):
                 parent=self
             )
 
+
 if __name__ == "__main__":
     if cfg.get(cfg.dpiScale) != "Auto":
         os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "0"
         os.environ["QT_SCALE_FACTOR"] = str(cfg.get(cfg.dpiScale))
 
     app = QApplication(sys.argv)
-    #app.setStyle("Fluent")  # Set the Fusion style for QFluentWidgets
-    #locale = cfg.get(cfg.language).value
-    #fluentTranslator = FluentTranslator(locale)
-    #appTranslator = QTranslator()
-    #lang_path = os.path.join(res_dir, "resource", "lang")
-    #appTranslator.load(locale, "lang", ".", lang_path)
+    locale = cfg.get(cfg.language).value
+    fluentTranslator = FluentTranslator(locale)
+    appTranslator = QTranslator()
+    lang_path = os.path.join(res_dir, "resource", "lang")
+    appTranslator.load(locale, "lang", ".", lang_path)
 
-    #app.installTranslator(fluentTranslator)
-    #app.installTranslator(appTranslator)
+    app.installTranslator(fluentTranslator)
+    app.installTranslator(appTranslator)
 
     window = MainWindow()
     window.show()

@@ -42,14 +42,14 @@ class AudioExtractorThread(QThread):
     def run(self):
         try:
             os.makedirs(os.path.dirname(self.temp_filename), exist_ok=True)
-            
+
             (
                 ffmpeg.input(self.video_file_path)
                 .output(self.temp_filename, format='wav', acodec='pcm_s16le', ac=1, ar='16k')
                 .overwrite_output()
                 .run(capture_stdout=True, capture_stderr=True)
             )
-            
+
             if os.path.exists(self.temp_filename):
                 self.audio_extracted.emit(self.temp_filename)
             else:
@@ -63,7 +63,7 @@ class TranscriptionWorker(QThread):
     request_save_path = pyqtSignal(str)
     finished_signal = pyqtSignal(str, bool)
     request_keep_audio = pyqtSignal(str)
-    
+
     def __init__(self, model, audio_file):
         super().__init__()
         self.model = model
@@ -89,31 +89,31 @@ class TranscriptionWorker(QThread):
                 vad_filter=False,  # make selectable from ui
                 vad_parameters=dict(
                     #threshold=0.0045,
-                    threshold=0.1,  # best 0.2? def 0.5 
+                    threshold=0.1,  # best 0.2? def 0.5
                     min_speech_duration_ms=300,  # 0 10
                     max_speech_duration_s=float("inf"),
                     min_silence_duration_ms=1000,  # def 2000
                     speech_pad_ms=700
                 )
             )
-            
+
             # Generate SRT formatted content
             srt_content = ""
             for i, segment in enumerate(segments, start=1):
                 start_time = self._format_time(segment.start)
                 end_time = self._format_time(segment.end)
                 srt_content += f"{i}\n{start_time} --> {end_time}\n{segment.text.strip()}\n\n"
-            
+
             self._mutex.lock()
             self.request_save_path.emit(srt_content)
             self._mutex.unlock()
-            
+
             while not self._abort and not hasattr(self, 'save_path'):
                 self.msleep(100)
-            
+
             if self._abort:
                 return
-                
+
             if self.save_path:
                 with open(self.save_path, "w", encoding='utf-8') as f:
                     f.write(srt_content)
@@ -156,13 +156,13 @@ class SubtitleCreator:
         """Entry point for subtitle creation"""
         if self.cfg.get(self.cfg.model).value == 'None':
             return
-            
+
         self.current_file_path = file_path
         self.parent.progressbar.start()
         if hasattr(self, 'transcription_worker'):
             self.transcription_worker.abort()
             self.transcription_worker.deleteLater()
-        
+
         self.extract_audio(file_path)
 
     def extract_audio(self, file_path):
@@ -189,7 +189,7 @@ class SubtitleCreator:
             self.model_loader.model_loaded.connect(self.on_model_ready)
             self.model_loader.start()
         else:
-            self.on_model_ready(self.model, self.cfg.get(self.cfg.model).value)       
+            self.on_model_ready(self.model, self.cfg.get(self.cfg.model).value)
 
     def on_model_ready(self, model, model_name):
         """When model is loaded/ready, transcribe the audio"""
@@ -198,7 +198,7 @@ class SubtitleCreator:
             error_box.cancelButton.hide()
             error_box.buttonLayout.insertStretch(1)
             return
-            
+
         self.model = model
         if hasattr(self, 'current_audio_file'):
             self.transcribe_audio(self.current_audio_file)
@@ -206,10 +206,10 @@ class SubtitleCreator:
     def transcribe_audio(self, audio_file):
         """Start transcription with loaded model"""
         self.transcription_worker = TranscriptionWorker(self.model, audio_file)
-        
+
         self.transcription_worker.request_save_path.connect(self.parent.handle_save_path_request)
         self.transcription_worker.finished_signal.connect(self.parent.on_transcription_done)
         self.transcription_worker.request_keep_audio.connect(self.parent.handle_keep_audio)
         self.transcription_worker.finished.connect(self.parent.cleanup_worker)
-        
+
         self.transcription_worker.start()
