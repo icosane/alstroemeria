@@ -5,8 +5,8 @@ from PyQt6.QtCore import QThread, pyqtSignal, QMutex
 from qfluentwidgets import InfoBar
 
 class TranslationWorker(QThread):
-    request_save_path = pyqtSignal(str, str)  # Emits (default_name, translated_content)
-    finished_signal = pyqtSignal(str, bool)  # Emits (output_path, success)
+    request_save_path = pyqtSignal(str, str)
+    finished_signal = pyqtSignal(str, bool)
     progress_updated = pyqtSignal(int)
 
     def __init__(self, input_path, from_code, to_code):
@@ -84,7 +84,6 @@ class TranslationWorker(QThread):
                 return
 
             if self.save_path:
-                # Ensure .srt extension
                 if not self.save_path.lower().endswith('.srt'):
                     self.save_path += '.srt'
 

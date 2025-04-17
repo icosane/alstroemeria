@@ -51,6 +51,41 @@ if os.name == 'nt':
     myappid = u'icosane.alstroemeria.build.100'  # arbitrary string
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
+class ErrorHandler(object):
+    def __call__(self, exctype, value, tb):
+        # Extract the traceback details
+        tb_info = traceback.extract_tb(tb)
+        # Get the last entry in the traceback (the most recent call)
+        last_call = tb_info[-1] if tb_info else None
+
+        if last_call:
+            filename, line_number, function_name, text = last_call
+            error_message = (f"Type: {exctype.__name__}\n"
+                             f"Message: {value}\n"
+                             f"File: {filename}\n"
+                             f"Line: {line_number}\n"
+                             f"Code: {text}")
+        else:
+            error_message = (f"Type: {exctype.__name__}\n"
+                             f"Message: {value}")
+
+        error_box = MessageBox("Error", error_message, parent=window)
+        error_box.cancelButton.hide()
+        error_box.buttonLayout.insertStretch(1)
+        error_box.exec()
+
+    def write(self, message):
+        if message.startswith("Error:"):
+            error_box = MessageBox("Error", message, parent=window)
+            error_box.cancelButton.hide()
+            error_box.buttonLayout.insertStretch(1)
+            error_box.exec()
+        else:
+            pass
+
+    def flush(self):
+        pass
+
 class FileLabel(QLabel):
     fileSelected = pyqtSignal(str)
 
@@ -161,12 +196,10 @@ class FileLabel(QLabel):
         new_widget = _on_accepted_Widget(file_path, self.main_window)
 
         if file_path.lower().endswith('.srt'):
-            # Look for corresponding audio file
             base_name = os.path.splitext(os.path.basename(file_path))[0]
             temp_dir = tempfile.gettempdir()
             audio_files = glob.glob(os.path.join(temp_dir, "temp_audio_*.wav"))
 
-            # Check if any audio file matches our SRT (by base name)
             has_audio = any(base_name in os.path.basename(audio) for audio in audio_files)
             new_widget.set_audio_state(has_audio)
 
@@ -227,7 +260,6 @@ class _on_accepted_Widget(QWidget):
         self.setLayout(self.layout)
 
     def update_button_states(self):
-        """Update button states based on current file and audio status"""
         if not self.is_srt:  # Video file
             self.getsub.setEnabled(True)
             self.gettl.setEnabled(False)
@@ -242,15 +274,14 @@ class _on_accepted_Widget(QWidget):
             self.vo.setEnabled(self.has_audio)
 
     def set_audio_state(self, has_audio):
-        """Update audio file state and refresh buttons"""
         self.has_audio = has_audio
         self.update_button_states()
 
     def start_subtitle_process(self):
-        self.main_window.start_subtitle_process(self.file_path)
+        self.main_window.subtitle_creator.start_subtitle_process(self.file_path)
 
     def start_translation_process(self):
-        self.main_window.start_translation_process(self.file_path)
+        self.main_window.srt_translator.start_translation_process(self.file_path)
 
     def start_voiceover_process(self):
         self.main_window.vo_creator.start_voiceover_process(self.file_path)
@@ -263,7 +294,6 @@ class _on_accepted_Widget(QWidget):
         return [from_lang, to_lang, filename]
 
     def update_file(self, new_file_path):
-        """Update the file path and button states"""
         self.file_path = new_file_path
         self.is_srt = new_file_path.lower().endswith('.srt')
         from_lang, to_lang, filename = self.langdetect(new_file_path)
@@ -306,7 +336,6 @@ class SelectedFileCard(HeaderCardWidget):
         self.viewLayout.addLayout(self._layout)
 
     def update_file(self, file_path):
-        """Update the displayed file information"""
         self.file_name = os.path.basename(file_path)
         self.fileLabel.setText('<b>{}</b>'.format(self.file_name))
 
@@ -430,12 +459,10 @@ class MainWindow(QMainWindow):
         self.move(x, y)
 
     def update_argos_remove_button_state(self,enabled):
-        """Update the Argos package remove button state based on current selection"""
         if hasattr(self, 'card_deleteargosmodel'):
             self.card_deleteargosmodel.button.setEnabled(enabled)
 
     def update_tts_remove_button_state(self,enabled):
-        """Update the TTS remove button state based on current selection"""
         if hasattr(self, 'card_deletettsmodel'):
             self.card_deletettsmodel.button.setEnabled(enabled)
 
@@ -487,24 +514,19 @@ class MainWindow(QMainWindow):
         central_widget = self.centralWidget()
         layout = central_widget.layout()
 
-        # Find the current file widget (should be at index 0)
         current_widget = layout.itemAt(0).widget()
 
-        # Remove the current widget
         layout.removeWidget(current_widget)
         current_widget.deleteLater()
 
-        # Add back the file picker
         self.filepicker = FileLabel(self)
         layout.insertWidget(0, self.filepicker)
 
-        # Hide the back button
         self.back_button.hide()
 
     def settings_layout(self):
         settings_layout = QVBoxLayout()
 
-        # Create a horizontal layout for the back button
         back_button_layout = QHBoxLayout()
 
         back_button_layout.setContentsMargins(10, 5, 5, 5)
@@ -758,7 +780,7 @@ class MainWindow(QMainWindow):
             f"translate-{language_pair}-*"
         )
 
-        # Remove .argosmodel file (no wildcard needed)
+        # Remove .argosmodel file
         model_file = os.path.join(
             base_dir,
             "models/argostranslate/cache/argos-translate/downloads",
@@ -818,7 +840,6 @@ class MainWindow(QMainWindow):
         directory = os.path.join(base_dir, "models/coquiTTS", "tts")
         if os.path.exists(directory) and os.path.isdir(directory):
             try:
-                # Remove the directory and its contents
                 shutil.rmtree(directory)
                 cfg.set(cfg.tts_model, 'None')
 
@@ -859,7 +880,7 @@ class MainWindow(QMainWindow):
 
         elif status == "success":
             if hasattr(self, 'model_thread') and self.model_thread.isRunning():
-                self.model_thread.stop()  # Stop the thread after success
+                self.model_thread.stop()
             self.download_progressbar.stop()
             InfoBar.success(
                 title=QCoreApplication.translate("MainWindow", "Success"),
@@ -901,7 +922,7 @@ class MainWindow(QMainWindow):
 
         elif status == "success":
             if hasattr(self, 'tts_thread') and self.tts_thread.isRunning():
-                self.tts_thread.stop()  # Stop the thread after success
+                self.tts_thread.stop()
             self.download_progressbar.stop()
             InfoBar.success(
                 title=QCoreApplication.translate("MainWindow", "Success"),
@@ -927,17 +948,7 @@ class MainWindow(QMainWindow):
             )
             self.update_tts_remove_button_state(False)
 
-    def start_subtitle_process(self, file_path):
-        """Delegate to subtitle creator"""
-        self.subtitle_creator.start_subtitle_process(file_path)
-
-    def start_translation_process(self, file_path):
-        """Delegate to srt translator"""
-        self.srt_translator.start_subtitle_process(file_path)
-
-
     def handle_save_path_request(self, transcription):
-        """Handle save path request in main thread"""
         if hasattr(self.subtitle_creator, 'current_file_path'):
             base_name = os.path.splitext(os.path.basename(self.subtitle_creator.current_file_path))[0]
             default_name = f"{base_name}.srt"
@@ -947,7 +958,7 @@ class MainWindow(QMainWindow):
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             QCoreApplication.translate('MainWindow',"Save Transcription"),
-            default_name,  # Use the video file name as default
+            default_name,
             QCoreApplication.translate('MainWindow',"Subtitle Files (*.srt)")
         )
 
@@ -960,7 +971,6 @@ class MainWindow(QMainWindow):
                 self.progressbar.stop()
 
     def handle_translation_save_path(self, default_name, translated_content):
-        """Handle save path request in main thread"""
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             QCoreApplication.translate('MainWindow',"Save Translated Subtitles"),
@@ -970,7 +980,6 @@ class MainWindow(QMainWindow):
 
         if hasattr(self.srt_translator, 'translation_worker'):
             if file_path:
-                # Store both the path and ensure the worker has the content
                 self.srt_translator.translation_worker.save_path = file_path
                 self.srt_translator.translation_worker.translated_content = translated_content
             else:
@@ -979,7 +988,6 @@ class MainWindow(QMainWindow):
                 self.progressbar.stop()
 
     def on_transcription_done(self, result, success):
-        """Handle transcription completion"""
         self.progressbar.stop()
 
         if success:
@@ -1006,7 +1014,6 @@ class MainWindow(QMainWindow):
             error_box.buttonLayout.insertStretch(1)
 
     def on_translation_done(self, result, success):
-        """Handle translation completion"""
         self.progressbar.stop()
 
         if success:
@@ -1038,8 +1045,6 @@ class MainWindow(QMainWindow):
             )
 
     def handle_keep_audio(self, audio_file):
-        """Show dialog asking if user wants to keep audio file"""
-
         central_widget = self.centralWidget()
         layout = central_widget.layout()
         current_widget = layout.itemAt(0).widget()
@@ -1052,7 +1057,6 @@ class MainWindow(QMainWindow):
         box.yesButton.setText(QCoreApplication.translate('MainWindow',"Keep"))
         box.cancelButton.setText(QCoreApplication.translate('MainWindow',"Delete"))
 
-        # Store the result before checking
         result = box.exec()
 
         if result == 1:  # 1 is the value for yesSignal
@@ -1072,7 +1076,6 @@ class MainWindow(QMainWindow):
                 )
 
     def update_vo_button_state(self, enabled):
-        """Update the Voice Over button state in the current widget"""
         central_widget = self.centralWidget()
         layout = central_widget.layout()
         current_widget = layout.itemAt(0).widget()
@@ -1081,13 +1084,11 @@ class MainWindow(QMainWindow):
             current_widget.vo.setEnabled(enabled)
 
     def cleanup_worker(self):
-        """Clean up worker thread"""
         if hasattr(self.subtitle_creator, 'transcription_worker'):
             self.subtitle_creator.transcription_worker.deleteLater()
             del self.subtitle_creator.transcription_worker
 
     def closeEvent(self, event):
-        """Clean up temp files when closing the app"""
         temp_dir = tempfile.gettempdir()
         temp_files = glob.glob(os.path.join(temp_dir, "temp_audio_*.wav"))
 
@@ -1138,7 +1139,6 @@ class MainWindow(QMainWindow):
             self.update_argos_remove_button_state(False)
 
     def handle_vo_save_path(self, default_name):
-        """Handle save path request for voiceover files"""
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             QCoreApplication.translate("MainWindow", "Save Voiceover"),
@@ -1155,7 +1155,6 @@ class MainWindow(QMainWindow):
                 self.progressbar.stop()
 
     def on_vo_done(self, result, success):
-        """Handle voiceover completion"""
         self.progressbar.stop()
 
         if success:
@@ -1197,6 +1196,6 @@ if __name__ == "__main__":
 
     window = MainWindow()
     window.show()
-    #sys.excepthook = ErrorHandler()
-    #sys.stderr = ErrorHandler()
+    sys.excepthook = ErrorHandler()
+    sys.stderr = ErrorHandler()
     sys.exit(app.exec())

@@ -17,10 +17,8 @@ class PackageDownloaderThread(QThread):
         try:
             self.download_start.emit("start")
 
-            # Get available packages
             available_packages = argostranslate.package.get_available_packages()
 
-            # Find the package we need
             package = next(
                 (p for p in available_packages
                  if p.from_code == self.from_code and p.to_code == self.to_code),
@@ -31,10 +29,8 @@ class PackageDownloaderThread(QThread):
                 self.download_finished.emit(f"error: Package {self.from_code}→{self.to_code} not found")
                 return
 
-            # Download package
             package_path = package.download()
 
-            # Install package
             argostranslate.package.install_from_path(package_path)
 
             if self._stopped:
@@ -79,7 +75,7 @@ def package_downloader(main_window, from_lang: str, to_lang: str):
 def update_package(main_window):
     language_pair = cfg.get(cfg.package).value
     content=QCoreApplication.translate("MainWindow", "Delete currently selected Argos Translate package. Currently selected: <b>{}</b>").format(cfg.get(cfg.package).value)
-    # Ensure record_button is updated
+
     if language_pair == 'None':
         main_window.update_argos_remove_button_state(False)
         main_window.card_deleteargosmodel.setContent(content)

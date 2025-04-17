@@ -17,7 +17,7 @@ class ModelDownloaderThread(QThread):
 
     def stop(self):
         self.quit()
-        self.wait()  # Ensure thread is cleaned up after quitting
+        self.wait()
 
 def model_downloader(main_window):
     model_path = f"./models/whisper/models--Systran--faster-whisper-{cfg.get(cfg.model).value}"
@@ -25,7 +25,7 @@ def model_downloader(main_window):
         model_path = f"./models/whisper/models--mobiuslabsgmbh--faster-whisper-{cfg.get(cfg.model).value}"
     if not os.path.exists(model_path):
         if hasattr(main_window, 'model_thread') and main_window.model_thread.isRunning():
-            main_window.model_thread.stop()  # Stop the existing thread if it's running
+            main_window.model_thread.stop()
 
         main_window.model_thread = ModelDownloaderThread()
         main_window.model_thread.download_start.connect(main_window.on_model_download_finished)

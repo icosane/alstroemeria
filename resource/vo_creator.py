@@ -8,8 +8,8 @@ from qfluentwidgets import InfoBar
 from .config import cfg
 
 class VOGeneratorWorker(QThread):
-    finished_signal = pyqtSignal(str, bool)  # Emits (output_path, success)
-    request_save_path = pyqtSignal(str)  # Emits default filename
+    finished_signal = pyqtSignal(str, bool)
+    request_save_path = pyqtSignal(str)
 
     def __init__(self, srt_file, reference_speaker):
         super().__init__()
@@ -25,19 +25,15 @@ class VOGeneratorWorker(QThread):
 
     def run(self):
         try:
-            # Initialize TTS model
             tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(f"{self.device}")
 
-            # Parse SRT file
             segments = self._parse_srt()
             if not segments:
                 self.finished_signal.emit("No valid subtitles found.", False)
                 return
 
-            # Create silent audio of total duration
             final_audio = AudioSegment.silent(duration=segments[-1]['end'])
 
-            # Process each segment
             for i, sub in enumerate(segments):
                 self._mutex.lock()
                 if self._abort:
@@ -48,11 +44,10 @@ class VOGeneratorWorker(QThread):
 
                 temp_file = os.path.join(tempfile.gettempdir(), f"temp_vo_{i}.wav")
 
-                # Generate TTS
                 tts.tts_to_file(
                     text=sub['text'],
                     speaker_wav=self.reference_speaker,
-                    language=f"{self.lang}",  # Default to English, can be made configurable
+                    language=f"{self.lang}",
                     file_path=temp_file
                 )
 
@@ -60,7 +55,6 @@ class VOGeneratorWorker(QThread):
                 current_dur = len(audio)
                 target_dur = sub['duration']
 
-                # Adjust duration
                 if current_dur > target_dur:
                     speed = min(current_dur / target_dur, 1.3)
                     audio = audio.speedup(playback_speed=speed, chunk_size=150)
@@ -68,14 +62,11 @@ class VOGeneratorWorker(QThread):
                     silence = AudioSegment.silent(duration=target_dur - current_dur)
                     audio += silence
 
-                # Add to final audio
                 final_audio = final_audio.overlay(audio, position=sub['start'])
 
-                # Clean up temp file
                 if os.path.exists(temp_file):
                     os.remove(temp_file)
 
-            # Request save path
             base_name = os.path.splitext(os.path.basename(self.srt_file))[0]
             default_name = f"{base_name}_voiceover.wav"
 
@@ -83,7 +74,6 @@ class VOGeneratorWorker(QThread):
             self.request_save_path.emit(default_name)
             self._mutex.unlock()
 
-            # Wait for save path or abort
             while not self._abort and not self.save_path:
                 self.msleep(100)
 
@@ -146,7 +136,6 @@ class VOCreator:
         self.current_file_path = None
 
     def start_voiceover_process(self, srt_file):
-        """Entry point for voiceover creation"""
         self.current_file_path = srt_file
         self.parent.progressbar.start()
 
