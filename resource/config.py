@@ -44,6 +44,34 @@ ArgosPathManager.initialize()
 
 from argostranslate import argospm
 
+class TTSPathManager:
+    """Manages coquiTTS directory configuration"""
+
+    @staticmethod
+    def initialize():
+        """Set up custom directories for coquiTTS"""
+        # Set base directory
+        if getattr(sys, 'frozen', False):
+            base_dir = os.path.dirname(sys.executable)  # PyInstaller bundle
+        else:
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+        TTS_HOME = os.path.join(base_dir, "models", "coquiTTS")
+        os.makedirs(TTS_HOME, exist_ok=True)
+
+        # Set environment variables
+        os.environ.update({
+            "TTS_HOME": str(Path(TTS_HOME)),
+        })
+
+        # Create directories
+        Path(os.environ["TTS_HOME"]).mkdir(parents=True, exist_ok=True)
+
+        return TTS_HOME
+
+
+TTSPathManager.initialize()
+
 class Language(Enum):
     """ Language enumeration """
 
@@ -132,6 +160,23 @@ class TranslationPackageSerializer(ConfigSerializer):
             raise ValueError(f"Invalid translation package: {value}")
         return package
 
+class TTSModel(Enum):
+    NONE = "None"
+    XTTS = "XTTS"
+
+class TTSModelSerializer(ConfigSerializer):
+    """ Device serializer """
+
+    def __init__(self):
+        self.TTS_map = {TTS.value: TTS for TTS in TTSModel}
+
+    def serialize(self, TTS):
+        return TTS.value
+
+    def deserialize(self, value: str):
+        TTS = self.TTS_map.get(value)
+        return TTS
+
 class Config(QConfig):
     language = OptionsConfigItem(
         "Settings", "language", QLocale.Language.English, OptionsValidator(Language), LanguageSerializer(), restart=True)
@@ -145,6 +190,8 @@ class Config(QConfig):
         "Settings", "DpiScale", "Auto", OptionsValidator([1, 1.25, 1.5, 1.75, 2, "Auto"]), restart=True)
     package = OptionsConfigItem(
         "Translation", "package", TranslationPackage.NONE, OptionsValidator(TranslationPackage), TranslationPackageSerializer(), restart=False)
+    tts_model = OptionsConfigItem(
+        "coquiTTS", "tts_model", TTSModel.NONE, OptionsValidator(TTSModel), TTSModelSerializer(), restart=False)
 
 
 cfg = Config()

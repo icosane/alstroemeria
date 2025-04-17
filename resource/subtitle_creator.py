@@ -86,7 +86,7 @@ class TranscriptionWorker(QThread):
                 condition_on_previous_text=True,
                 compression_ratio_threshold=None,
                 log_prob_threshold=None,
-                vad_filter=True,  # make selectable from ui
+                vad_filter=False,  # make selectable from ui
                 vad_parameters=dict(
                     #threshold=0.0045,
                     threshold=0.1,  # best 0.2? def 0.5 

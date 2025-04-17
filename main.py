@@ -2,13 +2,15 @@ import sys, os
 from PyQt6.QtGui import QColor, QIcon
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QLabel, QSizePolicy
 from PyQt6.QtCore import Qt, pyqtSignal, QTranslator, QCoreApplication, QTimer
-from qfluentwidgets import setThemeColor, TransparentToolButton, FluentIcon, PushSettingCard, isDarkTheme, SettingCard, MessageBox, FluentTranslator, IndeterminateProgressBar, HeaderCardWidget, BodyLabel, IconWidget, InfoBarIcon, PushButton, SubtitleLabel, ComboBoxSettingCard, OptionsSettingCard, HyperlinkCard, ScrollArea, InfoBar, InfoBarPosition, StrongBodyLabel, Flyout, FlyoutAnimationType
+from qfluentwidgets import setThemeColor, TransparentToolButton, FluentIcon, PushSettingCard, isDarkTheme, SettingCard, MessageBox, FluentTranslator, IndeterminateProgressBar, HeaderCardWidget, BodyLabel, IconWidget, InfoBarIcon, PushButton, SubtitleLabel, ComboBoxSettingCard, OptionsSettingCard, HyperlinkCard, ScrollArea, InfoBar, InfoBarPosition, StrongBodyLabel, Flyout, FlyoutAnimationType, SwitchSettingCard
 from winrt.windows.ui.viewmanagement import UISettings, UIColorType
 from resource.config import cfg
 from resource.model_utils import update_model, update_device
 from resource.subtitle_creator import SubtitleCreator
 from resource.srt_translator import SRTTranslator
 from resource.argos_utils import update_package
+from resource.TTSUtils import update_tts
+from resource.vo_creator import VOCreator
 import shutil
 import traceback, gc
 import tempfile
@@ -182,6 +184,7 @@ class _on_accepted_Widget(QWidget):
 
         self.getsub.clicked.connect(self.start_subtitle_process)
         self.gettl.clicked.connect(self.start_translation_process)
+        self.vo.clicked.connect(self.start_voiceover_process)
 
         self.button_layout.addWidget(self.getsub)
         self.button_layout.addWidget(self.gettl)
@@ -215,6 +218,9 @@ class _on_accepted_Widget(QWidget):
 
     def start_translation_process(self):
         self.main_window.start_translation_process(self.file_path)
+
+    def start_voiceover_process(self):
+        self.main_window.vo_creator.start_voiceover_process(self.file_path)
 
     def langdetect(self, filepath):
         language_pair = cfg.get(cfg.package).value
@@ -280,6 +286,7 @@ class MainWindow(QMainWindow):
     model_changed = pyqtSignal()
     device_changed = pyqtSignal()
     package_changed = pyqtSignal()
+    ttsmodel_changed = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
@@ -296,9 +303,11 @@ class MainWindow(QMainWindow):
         self.model_changed.connect(lambda: update_model(self))
         self.device_changed.connect(lambda: update_device(self))
         self.package_changed.connect(lambda: update_package(self))
+        self.ttsmodel_changed.connect(lambda: update_tts(self))
 
         self.subtitle_creator = SubtitleCreator(self, cfg)
         self.srt_translator = SRTTranslator(self, cfg)
+        self.vo_creator = VOCreator(self, cfg)
 
         QTimer.singleShot(100, self.init_check)
 
@@ -378,7 +387,7 @@ class MainWindow(QMainWindow):
             isClosable=True,
             position=InfoBarPosition.TOP_RIGHT,
             duration=2000,
-            parent=window
+            parent=self.settings_win
         )
 
     def center(self):
@@ -394,6 +403,11 @@ class MainWindow(QMainWindow):
         """Update the Argos package remove button state based on current selection"""
         if hasattr(self, 'card_deleteargosmodel'):
             self.card_deleteargosmodel.button.setEnabled(enabled)
+
+    def update_tts_remove_button_state(self,enabled):
+        """Update the TTS remove button state based on current selection"""
+        if hasattr(self, 'card_deletettsmodel'):
+            self.card_deletettsmodel.button.setEnabled(enabled)
 
     def main_layout(self):
         main_layout = QVBoxLayout()
@@ -542,6 +556,17 @@ class MainWindow(QMainWindow):
         card_layout.addWidget(self.card_settlpackage, alignment=Qt.AlignmentFlag.AlignTop)
         cfg.package.valueChanged.connect(self.package_changed.emit)
 
+        self.card_setttsmodel = ComboBoxSettingCard(
+            configItem=cfg.tts_model,
+            icon=FluentIcon.CLOUD_DOWNLOAD,
+            title=QCoreApplication.translate("MainWindow","coquiTTS Model"),
+            content=QCoreApplication.translate("MainWindow", "Change coquiTTS model"),
+            texts=['None', 'XTTS']
+        )
+
+        card_layout.addWidget(self.card_setttsmodel, alignment=Qt.AlignmentFlag.AlignTop)
+        cfg.tts_model.valueChanged.connect(self.ttsmodel_changed.emit)
+
         self.modelsdel_title = StrongBodyLabel(QCoreApplication.translate("MainWindow", "Model removal"))
         self.modelsdel_title.setTextColor(QColor(0, 0, 0), QColor(255, 255, 255))
         card_layout.addSpacing(20)
@@ -570,6 +595,19 @@ class MainWindow(QMainWindow):
         self.card_deleteargosmodel.clicked.connect(self.packageremover)
         if ((cfg.get(cfg.package).value == 'None')):
             self.card_deleteargosmodel.button.setDisabled(True)
+
+
+        self.card_deletettsmodel = PushSettingCard(
+            text=QCoreApplication.translate("MainWindow","Remove"),
+            icon=FluentIcon.BROOM,
+            title=QCoreApplication.translate("MainWindow","Remove coquiTTS model"),
+            content=QCoreApplication.translate("MainWindow", "Delete currently selected coquiTTS model. Will be removed: <b>{}</b>").format(cfg.get(cfg.tts_model).value),
+        )
+
+        card_layout.addWidget(self.card_deletettsmodel, alignment=Qt.AlignmentFlag.AlignTop)
+        self.card_deletettsmodel.clicked.connect(self.ttsmodelremover)
+        if ((cfg.get(cfg.tts_model).value == 'None')):
+            self.card_deletettsmodel.button.setDisabled(True)
 
         self.miscellaneous_title = StrongBodyLabel(QCoreApplication.translate("MainWindow", "Miscellaneous"))
         self.miscellaneous_title.setTextColor(QColor(0, 0, 0), QColor(255, 255, 255))
@@ -667,9 +705,9 @@ class MainWindow(QMainWindow):
                     content=QCoreApplication.translate("MainWindow", "Model removed"),
                     orient=Qt.Orientation.Horizontal,
                     isClosable=True,
-                    position=InfoBarPosition.BOTTOM,
+                    position=InfoBarPosition.TOP_RIGHT,
                     duration=2000,
-                    parent=self
+                    parent=self.settings_win
                 )
             except Exception as e:
                 InfoBar.error(
@@ -677,9 +715,9 @@ class MainWindow(QMainWindow):
                     content=QCoreApplication.translate("MainWindow", f"Failed to remove the model: {e}"),
                     orient=Qt.Orientation.Horizontal,
                     isClosable=True,
-                    position=InfoBarPosition.BOTTOM,
+                    position=InfoBarPosition.TOP_RIGHT,
                     duration=2000,
-                    parent=self
+                    parent=self.settings_win
                 )
 
     def packageremover(self):
@@ -721,9 +759,9 @@ class MainWindow(QMainWindow):
                     content=QCoreApplication.translate("MainWindow", "Model removed successfully"),
                     orient=Qt.Orientation.Horizontal,
                     isClosable=True,
-                    position=InfoBarPosition.BOTTOM,
+                    position=InfoBarPosition.TOP_RIGHT,
                     duration=2000,
-                    parent=self
+                    parent=self.settings_win
                 )
             else:
                 InfoBar.warning(
@@ -731,9 +769,9 @@ class MainWindow(QMainWindow):
                     content=QCoreApplication.translate("MainWindow", "No model found to remove"),
                     orient=Qt.Orientation.Horizontal,
                     isClosable=True,
-                    position=InfoBarPosition.BOTTOM,
+                    position=InfoBarPosition.TOP_RIGHT,
                     duration=2000,
-                    parent=self
+                    parent=self.settings_win
                 )
 
         except Exception as e:
@@ -742,10 +780,39 @@ class MainWindow(QMainWindow):
                 content=QCoreApplication.translate("MainWindow", f"Failed to remove model: {str(e)}"),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
-                position=InfoBarPosition.BOTTOM,
+                position=InfoBarPosition.TOP_RIGHT,
                 duration=2000,
-                parent=self
+                parent=self.settings_win
             )
+
+    def ttsmodelremover(self):
+        directory = os.path.join(base_dir, "models/coquiTTS", "tts")
+        if os.path.exists(directory) and os.path.isdir(directory):
+            try:
+                # Remove the directory and its contents
+                shutil.rmtree(directory)
+                cfg.set(cfg.tts_model, 'None')
+
+
+                InfoBar.success(
+                    title=QCoreApplication.translate("MainWindow", "Success"),
+                    content=QCoreApplication.translate("MainWindow", "Model removed"),
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP_RIGHT,
+                    duration=2000,
+                    parent=self.settings_win
+                )
+            except Exception as e:
+                InfoBar.error(
+                    title=QCoreApplication.translate("MainWindow", "Error"),
+                    content=QCoreApplication.translate("MainWindow", f"Failed to remove the model: {e}"),
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP_RIGHT,
+                    duration=2000,
+                    parent=self.settings_win
+                )
 
     def on_model_download_finished(self, status):
         if status == "start":
@@ -755,9 +822,9 @@ class MainWindow(QMainWindow):
                 content=QCoreApplication.translate("MainWindow", "Model download started. Please wait for it to finish"),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
-                position=InfoBarPosition.BOTTOM,
+                position=InfoBarPosition.TOP_RIGHT,
                 duration=4000,
-                parent=self
+                parent=self.settings_win
             )
             self.update_remove_button(False)
 
@@ -770,9 +837,9 @@ class MainWindow(QMainWindow):
                 content=QCoreApplication.translate("MainWindow", "Model successfully downloaded"),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
-                position=InfoBarPosition.BOTTOM,
+                position=InfoBarPosition.TOP_RIGHT,
                 duration=4000,
-                parent=self
+                parent=self.settings_win
             )
             self.update_remove_button(True)
             gc.collect()
@@ -783,11 +850,53 @@ class MainWindow(QMainWindow):
                 content=QCoreApplication.translate("MainWindow", f"Failed to download model: {status}"),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
-                position=InfoBarPosition.BOTTOM,
+                position=InfoBarPosition.TOP_RIGHT,
                 duration=4000,
-                parent=self
+                parent=self.settings_win
             )
             self.update_remove_button(False)
+
+    def on_tts_download_finished(self, status):
+        if status == "start":
+            self.download_progressbar.start()
+            InfoBar.info(
+                title=QCoreApplication.translate("MainWindow", "Information"),
+                content=QCoreApplication.translate("MainWindow", "TTS Model download started. Please wait for it to finish"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=4000,
+                parent=self.settings_win
+            )
+            self.update_tts_remove_button_state(False)
+
+        elif status == "success":
+            if hasattr(self, 'tts_thread') and self.tts_thread.isRunning():
+                self.tts_thread.stop()  # Stop the thread after success
+            self.download_progressbar.stop()
+            InfoBar.success(
+                title=QCoreApplication.translate("MainWindow", "Success"),
+                content=QCoreApplication.translate("MainWindow", "Model successfully downloaded"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=4000,
+                parent=self.settings_win
+            )
+            self.update_tts_remove_button_state(True)
+            gc.collect()
+
+        else:
+            InfoBar.error(
+                title=QCoreApplication.translate("MainWindow", "Error"),
+                content=QCoreApplication.translate("MainWindow", f"Failed to download model: {status}"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=4000,
+                parent=self.settings_win
+            )
+            self.update_tts_remove_button_state(False)
 
     def start_subtitle_process(self, file_path):
         """Delegate to subtitle creator"""
@@ -966,16 +1075,75 @@ class MainWindow(QMainWindow):
 
     def on_package_download_finished(self, status):
         if status == "start":
-            print(f"Downloading {cfg.get(cfg.package).value} package")
+            #print(f"Downloading {cfg.get(cfg.package).value} package")
+            InfoBar.info(
+                title=QCoreApplication.translate("MainWindow", "Information"),
+                content=QCoreApplication.translate("MainWindow", f"Downloading {cfg.get(cfg.package).value} package"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=4000,
+                parent=self.settings_win
+            )
             self.update_argos_remove_button_state(False)
         elif status == "success":
-            print("Package installed successfully!")
+            #print("Package installed successfully!")
+            InfoBar.success(
+                title="Success",
+                content=f"Package installed successfully!",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=4000,
+                parent=self.settings_win
+            )
             self.update_argos_remove_button_state(True)
         elif status.startswith("error"):
             #self.show_error_message(status)
             print(status)
             self.update_argos_remove_button_state(False)
 
+    def handle_vo_save_path(self, default_name):
+        """Handle save path request for voiceover files"""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Voiceover", 
+            default_name,
+            "Audio Files (*.wav)"
+        )
+        
+        if hasattr(self.vo_creator, 'vo_worker'):
+            if file_path:
+                self.vo_creator.vo_worker.save_path = file_path
+            else:
+                self.vo_creator.vo_worker.save_path = ""
+                self.vo_creator.vo_worker.abort()
+                self.progressbar.stop()
+
+    def on_vo_done(self, result, success):
+        """Handle voiceover completion"""
+        self.progressbar.stop()
+        
+        if success:
+            InfoBar.success(
+                title="Success",
+                content=f"Voiceover saved to {result}",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.BOTTOM,
+                duration=4000,
+                parent=self
+            )
+        elif result:  # Error message
+            InfoBar.error(
+                title="Error",
+                content=result,
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.BOTTOM,
+                duration=4000,
+                parent=self
+            )
 
 if __name__ == "__main__":
     if cfg.get(cfg.dpiScale) != "Auto":
