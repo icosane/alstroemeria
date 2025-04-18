@@ -6,6 +6,7 @@ import tempfile
 from PyQt6.QtCore import QThread, pyqtSignal, QMutex
 from qfluentwidgets import InfoBar
 from .config import cfg
+from langdetect import detect  # Add language detection library
 
 class VOGeneratorWorker(QThread):
     finished_signal = pyqtSignal(str, bool)
@@ -19,9 +20,6 @@ class VOGeneratorWorker(QThread):
         self._abort = False
         self.save_path = ""
         self.device = cfg.get(cfg.device).value
-        lang_pair = cfg.get(cfg.package).value
-        from_code, to_code = lang_pair.split('_')
-        self.lang = to_code
 
     def run(self):
         try:
@@ -44,10 +42,17 @@ class VOGeneratorWorker(QThread):
 
                 temp_file = os.path.join(tempfile.gettempdir(), f"temp_vo_{i}.wav")
 
+                # Detect language from text
+                try:
+                    lang_code = self._detect_language(sub['text'])
+                except Exception as e:
+                    lang_code = "en"  # Fallback to English if detection fails
+                    print(f"Language detection failed, using English as fallback: {e}")
+
                 tts.tts_to_file(
                     text=sub['text'],
                     speaker_wav=self.reference_speaker,
-                    language=f"{self.lang}",
+                    language=lang_code,  # Use detected language
                     file_path=temp_file
                 )
 
@@ -83,11 +88,48 @@ class VOGeneratorWorker(QThread):
             if self.save_path:
                 final_audio.export(self.save_path, format="wav")
                 self.finished_signal.emit(self.save_path, True)
+                self._cleanup_temp_files()
             else:
                 self.finished_signal.emit("", False)
 
         except Exception as e:
             self.finished_signal.emit(f"Error generating voiceover: {str(e)}", False)
+            self._cleanup_temp_files()  # Clean up even if error occurs
+
+    def _detect_language(self, text):
+        """Detect language from text and return appropriate language code"""
+        lang_map = {
+            'en': 'en',    # English
+            'ru': 'ru',    # Russian
+            'es': 'es',    # Spanish
+            'fr': 'fr',    # French
+            'de': 'de',    # German
+            'it': 'it',    # Italian
+            'pt': 'pt',   # Portuguese
+            'pl': 'pl',    # Polish
+            'tr': 'tr',    # Turkish
+            'nl': 'nl',    # Dutch
+            'cs': 'cs',    # Czech
+            'ar': 'ar',   # Arabic
+            'zh': 'zh-cn',  # Chinese
+            'ja': 'ja',    # Japanese
+            'hi': 'hi',    # Hindi
+            'ko': 'ko'     # Korean
+        }
+
+        detected = detect(text)
+        return lang_map.get(detected, 'en')  # Default to English if language not in map
+
+    def _cleanup_temp_files(self):
+        """Clean up temporary files"""
+        temp_dir = tempfile.gettempdir()
+        temp_files = glob.glob(os.path.join(temp_dir, "temp_audio_*.wav"))
+
+        for file in temp_files:
+            try:
+                os.remove(file)
+            except Exception as e:
+                print(f"Error cleaning up reference speaker file {self.reference_speaker}: {e}")
 
     def _parse_srt(self):
         """Parse SRT content into segments with timing information"""
@@ -128,6 +170,7 @@ class VOGeneratorWorker(QThread):
         self._abort = True
         self._mutex.unlock()
         self.wait()
+        self._cleanup_temp_files()  # Clean up when aborting
 
 class VOCreator:
     def __init__(self, parent_window, cfg):

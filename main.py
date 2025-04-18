@@ -117,7 +117,7 @@ class FileLabel(QLabel):
         else:
             text = f'''
             <p style="text-align: center; font-size: {font_size}; color: {color};">
-                <br><br> Drag & drop any video or subtitle file here <br>
+                <br><br> Drag&Drop any video or subtitle file here <br>
                 <br>or<br><br>
                 <a href="" style="color: {color};"><strong>Click anywhere to browse file</strong></a>
                 <br>
@@ -139,10 +139,12 @@ class FileLabel(QLabel):
             self.open_file_dialog()
 
     def open_file_dialog(self):
+        initial_dir = self.main_window.last_directory if self.main_window.last_directory else ""
+
         self.file_path, _ = QFileDialog.getOpenFileName(
             self,
             QCoreApplication.translate("MainWindow", "Select a Video or Subtitle File"),
-            "",
+            initial_dir,
             QCoreApplication.translate("MainWindow",
                 "Video/Subtitle Files (*.mp4 *.avi *.mov *.mkv *.flv *.wmv *.srt);;"
                 "Video Files (*.mp4 *.avi *.mov *.mkv *.flv *.wmv);;"
@@ -150,6 +152,7 @@ class FileLabel(QLabel):
                 "All Files (*)")
         )
         if self.file_path:
+            self.main_window.last_directory = os.path.dirname(self.file_path)
             if self.is_video_file(self.file_path) or self.is_subtitle_file(self.file_path):
                 self.fileSelected.emit(self.file_path)
                 self.file_accepted(self.file_path)
@@ -244,7 +247,7 @@ class _on_accepted_Widget(QWidget):
         self.button_layout = QHBoxLayout()
         self.getsub = PushButton(FluentIcon.FONT_SIZE, QCoreApplication.translate('MainWindow', 'Create subtitles'))
         self.gettl = PushButton(FluentIcon.LANGUAGE, QCoreApplication.translate('MainWindow', 'Translate'))
-        self.vo = PushButton(FluentIcon.VOLUME, QCoreApplication.translate('MainWindow', 'Voice over'))
+        self.vo = PushButton(FluentIcon.VOLUME, QCoreApplication.translate('MainWindow', 'Voiceover'))
 
         self.update_button_states()
 
@@ -278,10 +281,10 @@ class _on_accepted_Widget(QWidget):
         self.update_button_states()
 
     def start_subtitle_process(self):
-        self.main_window.subtitle_creator.start_subtitle_process(self.file_path)
+        self.main_window.start_subtitle_process(self.file_path)
 
     def start_translation_process(self):
-        self.main_window.srt_translator.start_translation_process(self.file_path)
+        self.main_window.start_translation_process(self.file_path)
 
     def start_voiceover_process(self):
         self.main_window.vo_creator.start_voiceover_process(self.file_path)
@@ -310,7 +313,7 @@ class SelectedFileCard(HeaderCardWidget):
         self.file_name = os.path.basename(file_path)
         self.fileLabel = BodyLabel('<b>{}</b>'.format(self.file_name), self)
         self.successIcon = IconWidget(InfoBarIcon.SUCCESS, self)
-        self.infoLabel = BodyLabel(QCoreApplication.translate('MainWindow', 'If you want to create a voiceover based on translated subtitles, please select <b>"Keep"</b> when asked to keep the source audio file. The voiceover will use the same voice as the source file.<br><b>Please note: the voiceover is not available without source video.</b>'), self)
+        self.infoLabel = BodyLabel(QCoreApplication.translate('MainWindow', 'If you want to create a voiceover based on translated subtitles, please select <b>"Keep"</b> when asked to keep the source audio file. The voiceover will use the same voice as the source file.<br><b>Note: the voiceover is not available without the source video.</b><br><br><b>The source audio file is deleted after the voiceover is finished.</b>'), self)
         self.infoLabel.setWordWrap(True)
 
         self._layout = QVBoxLayout()
@@ -355,6 +358,7 @@ class MainWindow(QMainWindow):
         self.setup_theme()
         self.center()
         self.model = None
+        self.last_directory = ""
         self.setAcceptDrops(True)
 
         self.theme_changed.connect(self.update_theme)
@@ -379,7 +383,7 @@ class MainWindow(QMainWindow):
         if ((cfg.get(cfg.model).value == 'None')):
             InfoBar.info(
                 title=(QCoreApplication.translate("MainWindow", "Information")),
-                content=(QCoreApplication.translate("MainWindow", "<b>No model is currently selected</b>. Go to Settings and select the Whisper model before starting.")),
+                content=(QCoreApplication.translate("MainWindow", "<b>No models currently selected</b>. Go to Settings and select the models before starting.")),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=False,
                 position=InfoBarPosition.BOTTOM,
@@ -390,7 +394,7 @@ class MainWindow(QMainWindow):
         if (get_cuda_device_count() == 0) and ((cfg.get(cfg.device).value == 'cuda')):
             InfoBar.info(
                 title=(QCoreApplication.translate("MainWindow", "Information")),
-                content=(QCoreApplication.translate("MainWindow", "<b>Your device does not have an NVIDIA graphics card</b>. Application will run on CPU.")),
+                content=(QCoreApplication.translate("MainWindow", "<b>No NVIDIA graphics card detected</b>. Application will run on CPU.")),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=False,
                 position=InfoBarPosition.BOTTOM,
@@ -503,7 +507,7 @@ class MainWindow(QMainWindow):
         Flyout.create(
             icon=None,
             title=QCoreApplication.translate('MainWindow','How to use'),
-            content=QCoreApplication.translate('MainWindow',"Drag&Drop any video or .srt file in the window. <br><br> You will be presented with options to create subtitles, translate them, and make a voiceover based on translated subtitle file. <br><b>Please note, that in case of .srt file the voiceover option is not available as it is bound to the source file.</b> <br><br> Before using, please select your preferred Whisper model and translation languages in the Settings."),
+            content=QCoreApplication.translate('MainWindow',"Drag and drop any video or .srt file into the window.<br><br>You will be presented with options to create subtitles, translate them and create a voiceover based on the translated subtitle file.<br><b>Note that if you just drop an .srt file, the voiceover option will not be available. This is because it uses the audio from the video file.</b> <br><br>Before using, please select your preferred Whisper model and translation languages in the Settings."),
             target=self.faq_button,
             parent=self,
             isClosable=True,
@@ -948,12 +952,22 @@ class MainWindow(QMainWindow):
             )
             self.update_tts_remove_button_state(False)
 
+    def start_subtitle_process(self, file_path):
+        """Delegate to subtitle creator"""
+        self.subtitle_creator.start_subtitle_process(file_path)
+
+    def start_translation_process(self, file_path):
+        """Delegate to srt translator"""
+        self.srt_translator.start_subtitle_process(file_path)
+
     def handle_save_path_request(self, transcription):
+        initial_dir = self.last_directory if self.last_directory else ""
+
         if hasattr(self.subtitle_creator, 'current_file_path'):
             base_name = os.path.splitext(os.path.basename(self.subtitle_creator.current_file_path))[0]
-            default_name = f"{base_name}.srt"
+            default_name = os.path.join(initial_dir, f"{base_name}.srt")
         else:
-            default_name = ""
+            default_name = initial_dir
 
         file_path, _ = QFileDialog.getSaveFileName(
             self,
@@ -971,6 +985,10 @@ class MainWindow(QMainWindow):
                 self.progressbar.stop()
 
     def handle_translation_save_path(self, default_name, translated_content):
+        initial_dir = self.last_directory if self.last_directory else ""
+        default_name = os.path.join(initial_dir, os.path.basename(default_name))
+
+
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             QCoreApplication.translate('MainWindow',"Save Translated Subtitles"),
@@ -980,6 +998,7 @@ class MainWindow(QMainWindow):
 
         if hasattr(self.srt_translator, 'translation_worker'):
             if file_path:
+                self.last_directory = os.path.dirname(file_path)
                 self.srt_translator.translation_worker.save_path = file_path
                 self.srt_translator.translation_worker.translated_content = translated_content
             else:
@@ -1139,6 +1158,9 @@ class MainWindow(QMainWindow):
             self.update_argos_remove_button_state(False)
 
     def handle_vo_save_path(self, default_name):
+        initial_dir = self.last_directory if self.last_directory else ""
+        default_name = os.path.join(initial_dir, os.path.basename(default_name))
+
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             QCoreApplication.translate("MainWindow", "Save Voiceover"),
@@ -1148,6 +1170,7 @@ class MainWindow(QMainWindow):
 
         if hasattr(self.vo_creator, 'vo_worker'):
             if file_path:
+                self.last_directory = os.path.dirname(file_path)
                 self.vo_creator.vo_worker.save_path = file_path
             else:
                 self.vo_creator.vo_worker.save_path = ""

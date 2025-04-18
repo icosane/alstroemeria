@@ -52,7 +52,7 @@ Or open the extracted folder in [Visual Studio Code](https://code.visualstudio.c
 
 ## Usage
 
-Simply drag and drop any video or .srt file into the window.  You will then have the option to create subtitles, translate them, and generate a voiceover based on the translated subtitle file. Note: The voiceover option is not available for .srt files, as it is linked to the source video. Before getting started, please select your preferred Whisper model and translation languages in the Settings.
+Simply drag and drop any video or .srt file into the window.  You will then have the option to create subtitles, translate them, and generate a voiceover based on the subtitle file. Note that if you just drop an .srt file, the voiceover option will not be available. This is because it uses the audio from the video file. Before using, please select your preferred Whisper model and translation languages in the Settings.
 
 ## Acknowledgments
 
@@ -70,8 +70,9 @@ Simply drag and drop any video or .srt file into the window.  You will then have
 - [onnxruntime](https://github.com/microsoft/onnxruntime)
 - [PyTorch](https://pytorch.org/)
 - [pydub](https://github.com/jiaaro/pydub)
+- [langdetect](https://github.com/Mimino666/langdetect)
 - [PyInstaller](https://pyinstaller.org/)
-- [Violet icons](https://www.flaticon.com/free-icon/violet_9825224) - Violet icons created by gungyoga04 - Flaticon
+- [manuka icons](https://www.flaticon.com/free-icon/myrtus_8868385) - Manuka icons created by Paul J. - Flaticon
 
 ## Screenshots
 <div style="display: flex; flex-direction: column;">
