@@ -3,3 +3,5 @@ config/config.json
 models/whisper
 models/argostranslate
 models/coquiTTS
+build
+dist
