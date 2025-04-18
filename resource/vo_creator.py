@@ -73,7 +73,7 @@ class VOGeneratorWorker(QThread):
                     os.remove(temp_file)
 
             base_name = os.path.splitext(os.path.basename(self.srt_file))[0]
-            default_name = f"{base_name}_voiceover.wav"
+            default_name = f"{base_name}_voiceover.mp3"
 
             self._mutex.lock()
             self.request_save_path.emit(default_name)
@@ -86,15 +86,15 @@ class VOGeneratorWorker(QThread):
                 return
 
             if self.save_path:
-                final_audio.export(self.save_path, format="wav")
+                final_audio.export(self.save_path, format="mp3")
                 self.finished_signal.emit(self.save_path, True)
-                self._cleanup_temp_files()
+                #self._cleanup_temp_files()  # enable if clear temp after vo
             else:
                 self.finished_signal.emit("", False)
 
         except Exception as e:
             self.finished_signal.emit(f"Error generating voiceover: {str(e)}", False)
-            self._cleanup_temp_files()  # Clean up even if error occurs
+            #self._cleanup_temp_files()  # Clean up even if error occurs
 
     def _detect_language(self, text):
         """Detect language from text and return appropriate language code"""
@@ -170,7 +170,6 @@ class VOGeneratorWorker(QThread):
         self._abort = True
         self._mutex.unlock()
         self.wait()
-        self._cleanup_temp_files()  # Clean up when aborting
 
 class VOCreator:
     def __init__(self, parent_window, cfg):

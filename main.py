@@ -2,7 +2,7 @@ import sys, os
 from PyQt6.QtGui import QColor, QIcon
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QLabel
 from PyQt6.QtCore import Qt, pyqtSignal, QTranslator, QCoreApplication, QTimer
-sys.stdout = open(os.devnull, 'w')
+#sys.stdout = open(os.devnull, 'w')
 from qfluentwidgets import setThemeColor, TransparentToolButton, FluentIcon, PushSettingCard, isDarkTheme, SettingCard, MessageBox, FluentTranslator, IndeterminateProgressBar, HeaderCardWidget, BodyLabel, IconWidget, InfoBarIcon, PushButton, SubtitleLabel, ComboBoxSettingCard, OptionsSettingCard, HyperlinkCard, ScrollArea, InfoBar, InfoBarPosition, StrongBodyLabel, Flyout, FlyoutAnimationType
 from winrt.windows.ui.viewmanagement import UISettings, UIColorType
 from resource.config import cfg
@@ -1173,7 +1173,7 @@ class MainWindow(QMainWindow):
             self,
             QCoreApplication.translate("MainWindow", "Save Voiceover"),
             default_name,
-            QCoreApplication.translate("MainWindow", "Audio Files (*.wav)")
+            QCoreApplication.translate("MainWindow", "Audio Files (*.mp3)")
         )
 
         if hasattr(self.vo_creator, 'vo_worker'):
