@@ -47,11 +47,6 @@ else:
     base_dir = os.path.dirname(os.path.abspath(__file__))
     res_dir = base_dir
 
-if os.name == 'nt':
-    import ctypes
-    myappid = u'icosane.alstroemeria.build.100'  # arbitrary string
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-
 class ErrorHandler(object):
     def __call__(self, exctype, value, tb):
         # Extract the traceback details
@@ -1214,6 +1209,11 @@ if __name__ == "__main__":
     if cfg.get(cfg.dpiScale) != "Auto":
         os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "0"
         os.environ["QT_SCALE_FACTOR"] = str(cfg.get(cfg.dpiScale))
+
+    if os.name == 'nt':
+        import ctypes
+        myappid = u'icosane.alstroemeria.stv.100'  # arbitrary string
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
     app = QApplication(sys.argv)
     locale = cfg.get(cfg.language).value
