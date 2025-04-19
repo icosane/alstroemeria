@@ -176,6 +176,8 @@ class FileLabel(QLabel):
             for url in event.mimeData().urls():
                 self.file_path = url.toLocalFile()
                 if self.is_video_file(self.file_path) or self.is_subtitle_file(self.file_path):
+                    self.main_window.last_directory = os.path.dirname(self.file_path)
+
                     self.fileSelected.emit(self.file_path)
                     self.file_accepted(self.file_path)
                 else:

@@ -1,6 +1,6 @@
 # About
 
-Effortlessly create and translate subtitles for any video, complete with voiceover capabilities. Powered by Faster-Whisper, Argos Translate, Coqui TTS, and QFluentWidgets.
+Create and translate subtitles for any video, complete with voiceover capabilities. Powered by Faster-Whisper, Argos Translate, Coqui TTS, and QFluentWidgets.
 
 It was developed specifically for a family member, and as such, it is provided as-is. Please note that the project may not receive any new features or fixes in the future.
 
@@ -51,6 +51,8 @@ Or open the extracted folder in [Visual Studio Code](https://code.visualstudio.c
 
 
 ## Usage
+
+The first start can be quite long, as the program has to create the directories and environment variables. Subsequent starts should be faster.
 
 Simply drag and drop any video or .srt file into the window.  You will then have the option to create subtitles, translate them, and generate a voiceover based on the subtitle file. Note that if you just drop an .srt file, the voiceover option will not be available. This is because it uses the audio from the video file. Before using, please select your preferred Whisper model and translation languages in the Settings.
 
