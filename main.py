@@ -776,11 +776,19 @@ class MainWindow(QMainWindow):
     def packageremover(self):
         language_pair = cfg.get(cfg.package).value
 
-        package_pattern = os.path.join(
-            base_dir,
-            "models/argostranslate/data/argos-translate/packages",
-            f"translate-{language_pair}-*"
-        )
+        package_patterns = [
+            os.path.join(
+                base_dir,
+                "models/argostranslate/data/argos-translate/packages",
+                f"translate-{language_pair}-*"
+            ),
+            os.path.join(
+                base_dir,
+                "models/argostranslate/data/argos-translate/packages",
+                f"{language_pair}"
+            )
+        ]
+
 
         # Remove .argosmodel file
         model_file = os.path.join(
@@ -792,10 +800,11 @@ class MainWindow(QMainWindow):
         try:
             # Remove matching package directories
             removed_dirs = False
-            for dir_path in glob.glob(package_pattern):
-                if os.path.isdir(dir_path):
-                    shutil.rmtree(dir_path)
-                    removed_dirs = True
+            for pattern in package_patterns:
+                for dir_path in glob.glob(pattern):
+                    if os.path.isdir(dir_path):
+                        shutil.rmtree(dir_path)
+                        removed_dirs = True
 
             # Remove model file if exists
             removed_file = False
@@ -1129,6 +1138,7 @@ class MainWindow(QMainWindow):
 
     def on_package_download_finished(self, status):
         if status == "start":
+            self.download_progressbar.start()
             InfoBar.info(
                 title=QCoreApplication.translate("MainWindow", "Information"),
                 content=QCoreApplication.translate("MainWindow", "Downloading {} package").format(cfg.get(cfg.package).value),
@@ -1140,6 +1150,7 @@ class MainWindow(QMainWindow):
             )
             self.update_argos_remove_button_state(False)
         elif status == "success":
+            self.download_progressbar.stop()
             InfoBar.success(
                 title=QCoreApplication.translate("MainWindow", "Success"),
                 content=QCoreApplication.translate("MainWindow", "Package installed successfully!"),
@@ -1186,6 +1197,14 @@ class MainWindow(QMainWindow):
         self.progressbar.stop()
 
         if success:
+            #self.update_vo_button_state(False)
+            central_widget = self.centralWidget()
+            layout = central_widget.layout()
+            current_widget = layout.itemAt(0).widget()
+
+            if hasattr(current_widget, 'gettl') and not current_widget.gettl.isEnabled():
+                self.update_vo_button_state(False)
+
             InfoBar.success(
                 title=QCoreApplication.translate("MainWindow", "Success"),
                 content=QCoreApplication.translate("MainWindow", "Voiceover saved to {}").format(result),
