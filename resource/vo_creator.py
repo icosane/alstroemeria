@@ -86,7 +86,20 @@ class VOGeneratorWorker(QThread):
                 return
 
             if self.save_path:
-                final_audio.export(self.save_path, format="mp3")
+                #final_audio.export(self.save_path, format="mp3")
+                original_audio = AudioSegment.from_file(self.reference_speaker)
+    
+                # Ensure both audios are the same length
+                if len(original_audio) < len(final_audio):
+                    original_audio += AudioSegment.silent(duration=len(final_audio) - len(original_audio))
+                elif len(original_audio) > len(final_audio):
+                    final_audio += AudioSegment.silent(duration=len(original_audio) - len(final_audio))
+                
+                # Mix original (quieter) with dub (louder)
+                combined_audio = original_audio - 20  # Reduce original volume by 20dB
+                combined_audio = combined_audio.overlay(final_audio)
+                
+                combined_audio.export(self.save_path, format="mp3")
                 self.finished_signal.emit(self.save_path, True)
                 #self._cleanup_temp_files()  # enable if clear temp after vo
             else:
