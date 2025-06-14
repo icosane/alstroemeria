@@ -27,9 +27,15 @@ class TranslationWorker(QThread):
 
             # Read and parse SRT file
             with open(self.input_path, 'r', encoding='utf-8') as f:
-                srt_content = f.read()
+                file_content = f.read()
 
-            segments = self._parse_srt(srt_content)
+            if self.input_path.lower().endswith('.srt'):
+                segments = self._parse_srt(file_content)
+            elif self.input_path.lower().endswith('.vtt'):
+                segments = self._parse_vtt(file_content)
+            else:
+                self.finished_signal.emit("Unsupported file format", False)
+                return
             if not segments:
                 self.finished_signal.emit("No subtitles found to translate", False)
                 return
@@ -64,12 +70,19 @@ class TranslationWorker(QThread):
                 translated_segments.append((index, timecode, translated_text))
                 self.progress_updated.emit(int((i + 1) / total_segments * 100))
 
-            # Rebuild SRT content
-            self.translated_content = self._rebuild_srt(translated_segments)
+            # Rebuild file content
+            if self.input_path.lower().endswith('.srt'):
+                self.translated_content = self._rebuild_srt(translated_segments)
+            elif self.input_path.lower().endswith('.vtt'):
+                self.translated_content = self._rebuild_vtt(translated_segments)
 
             # Generate default filename and request save path
             base_name = os.path.splitext(os.path.basename(self.input_path))[0]
-            default_name = f"{base_name}_{self.from_code}_{self.to_code}.srt"
+            default_name = f"{base_name}_{self.from_code}_{self.to_code}"
+            if self.input_path.lower().endswith('.srt'):
+                default_name += '.srt'
+            elif self.input_path.lower().endswith('.vtt'):
+                default_name += '.vtt'
 
             # Request save path with both default name and content
             self._mutex.lock()
@@ -84,8 +97,12 @@ class TranslationWorker(QThread):
                 return
 
             if self.save_path:
-                if not self.save_path.lower().endswith('.srt'):
-                    self.save_path += '.srt'
+                if self.input_path.lower().endswith('.vtt'):
+                    if not self.save_path.lower().endswith('.vtt'):
+                        self.save_path += '.vtt'
+                else:
+                    if not self.save_path.lower().endswith('.srt'):
+                        self.save_path += '.srt'
 
                 # Save the file
                 with open(self.save_path, 'w', encoding='utf-8') as f:
@@ -116,6 +133,72 @@ class TranslationWorker(QThread):
     def _rebuild_srt(self, segments):
         """Rebuild SRT content from segments"""
         return '\n\n'.join([f"{index}\n{timecode}\n{text}" for index, timecode, text in segments])
+
+    def _parse_vtt(self, content):
+        """Parse VTT content into segments (index, timecode, text)"""
+        segments = []
+        
+        # Split the content into subtitle blocks
+        blocks = content.strip().split('\n\n')
+        
+        # Check if the file starts with WEBVTT header
+        if not blocks or not blocks[0].strip().startswith("WEBVTT"):
+            raise ValueError("Invalid VTT file format")
+            
+        # Process each subtitle block
+        for block in blocks[1:]:  # Skip header
+            lines = block.split('\n')
+            
+            # Skip empty lines
+            if not lines or not lines[0].strip():
+                continue
+                
+            # Find the index (if present)
+            if lines[0].strip().isdigit():
+                index = lines[0].strip()
+                lines = lines[1:]
+            else:
+                index = ""  # or None
+                
+            # Find the timecode
+            timecode_line = None
+            for line in lines:
+                if '-->' in line:
+                    timecode_line = line
+                    lines.remove(line)
+                    break
+                    
+            if timecode_line is None:
+                continue  # Skip blocks without timecodes
+                
+            timecode = timecode_line.strip()
+            
+            # The remainder of the lines are the subtitle text
+            text = '\n'.join(lines).strip()
+            
+            segments.append((index, timecode, text))
+            
+        if not segments:
+            raise ValueError("No subtitles found")
+            
+        return segments
+
+    def _rebuild_vtt(self, segments):
+        """Rebuild VTT content from segments"""
+        if not segments:
+            return ""
+            
+        vtt_content = f"WEBVTT\nKind: captions\nLanguage: {self.to_code}\n\n"
+        
+        for index, timecode, text in segments:
+            # Optional index (if present)
+            if index:
+                vtt_content += f"{index}\n"
+                
+            vtt_content += f"{timecode}\n"
+            vtt_content += f"{text}\n\n"
+            
+        return vtt_content.strip()
 
     def abort(self):
         self._mutex.lock()

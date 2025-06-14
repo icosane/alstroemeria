@@ -142,9 +142,9 @@ class FileLabel(QLabel):
             QCoreApplication.translate("MainWindow", "Select a Video or Subtitle File"),
             initial_dir,
             QCoreApplication.translate("MainWindow",
-                "Video/Subtitle Files (*.mp4 *.avi *.mov *.mkv *.flv *.wmv *.srt);;"
+                "Video/Subtitle Files (*.mp4 *.avi *.mov *.mkv *.flv *.wmv *.srt *.vtt);;"
                 "Video Files (*.mp4 *.avi *.mov *.mkv *.flv *.wmv);;"
-                "Subtitle Files (*.srt);;"
+                "Subtitle Files (*.srt *.vtt);;"
                 "All Files (*)")
         )
         if self.file_path:
@@ -155,7 +155,7 @@ class FileLabel(QLabel):
             else:
                 InfoBar.error(
                     title=QCoreApplication.translate("MainWindow", "Error"),
-                    content=QCoreApplication.translate("MainWindow", "Dropped file is not a video or .srt file"),
+                    content=QCoreApplication.translate("MainWindow", "Dropped file is not a video or subtitle file"),
                     orient=Qt.Orientation.Horizontal,
                     isClosable=True,
                     position=InfoBarPosition.BOTTOM,
@@ -183,7 +183,7 @@ class FileLabel(QLabel):
                 else:
                     InfoBar.error(
                         title=QCoreApplication.translate("MainWindow", "Error"),
-                        content=QCoreApplication.translate("MainWindow", "Dropped file is not a video or .srt file"),
+                        content=QCoreApplication.translate("MainWindow", "Dropped file is not a video or subtitle file"),
                         orient=Qt.Orientation.Horizontal,
                         isClosable=True,
                         position=InfoBarPosition.BOTTOM,
@@ -196,7 +196,7 @@ class FileLabel(QLabel):
         self.setStyleSheet("")
         new_widget = _on_accepted_Widget(file_path, self.main_window)
 
-        if file_path.lower().endswith('.srt'):
+        if file_path.lower().endswith('.srt') or file_path.lower().endswith('.vtt'):
             base_name = os.path.splitext(os.path.basename(file_path))[0]
             temp_dir = tempfile.gettempdir()
             audio_files = glob.glob(os.path.join(temp_dir, "temp_audio_*.wav"))
@@ -222,7 +222,7 @@ class FileLabel(QLabel):
         return ext.lower() in video_extensions
 
     def is_subtitle_file(self, file_path):
-        video_extensions = ['.srt']
+        video_extensions = ['.srt','.vtt']
         _, ext = os.path.splitext(file_path)
         return ext.lower() in video_extensions
 
@@ -233,10 +233,13 @@ class _on_accepted_Widget(QWidget):
         self.main_window = main_window
         self.file_path = file_path
         self.is_srt = file_path.lower().endswith('.srt')
+        self.is_vtt = file_path.lower().endswith('.vtt')
 
         from_lang, to_lang, filename = self.langdetect(self.file_path)
 
         self.is_translated_srt = (self.is_srt and
+                             (f'_{from_lang}_{to_lang}' in filename))
+        self.is_translated_vtt = (self.is_vtt and
                              (f'_{from_lang}_{to_lang}' in filename))
         self.has_audio = False  # Track if audio file exists
 
@@ -261,15 +264,15 @@ class _on_accepted_Widget(QWidget):
         self.setLayout(self.layout)
 
     def update_button_states(self):
-        if not self.is_srt:  # Video file
+        if not (self.is_srt or self.is_vtt):  # Video file
             self.getsub.setEnabled(True)
             self.gettl.setEnabled(False)
             self.vo.setEnabled(False)
-        elif self.is_translated_srt:
+        elif self.is_translated_srt or self.is_translated_vtt:
             self.getsub.setEnabled(False)
             self.gettl.setEnabled(False)
             self.vo.setEnabled(self.has_audio)
-        else:  # SRT file
+        else:  # Subtitle file
             self.getsub.setEnabled(False)
             self.gettl.setEnabled(True)
             self.vo.setEnabled(self.has_audio)
@@ -297,9 +300,12 @@ class _on_accepted_Widget(QWidget):
     def update_file(self, new_file_path):
         self.file_path = new_file_path
         self.is_srt = new_file_path.lower().endswith('.srt')
+        self.is_vtt = new_file_path.lower().endswith('.vtt')
         from_lang, to_lang, filename = self.langdetect(new_file_path)
 
         self.is_translated_srt = (self.is_srt and
+                             (f'_{from_lang}_{to_lang}' in filename))
+        self.is_translated_vtt = (self.is_vtt and
                              (f'_{from_lang}_{to_lang}' in filename))
         self.card_currentfile.update_file(new_file_path)
         self.update_button_states()
@@ -505,7 +511,7 @@ class MainWindow(QMainWindow):
         Flyout.create(
             icon=None,
             title=QCoreApplication.translate('MainWindow','How to use'),
-            content=QCoreApplication.translate('MainWindow',"Drag and drop any video or .srt file into the window.<br><br>You will be presented with options to create subtitles, translate them and create a voiceover based on the translated subtitle file.<br><b>Note that if you just drop an .srt file, the voiceover option will not be available. This is because it uses the audio from the video file.</b> <br><br>Before using, please select your preferred Whisper model and translation languages in the Settings."),
+            content=QCoreApplication.translate('MainWindow',"Drag and drop any video or .srt/.vtt file into the window.<br><br>You will be presented with options to create subtitles, translate them and create a voiceover based on the translated subtitle file.<br><b>Note that if you just drop an .srt file, the voiceover option will not be available. This is because it uses the audio from the video file.</b> <br><br>Before using, please select your preferred Whisper model and translation languages in the Settings."),
             target=self.faq_button,
             parent=self,
             isClosable=True,
@@ -980,7 +986,7 @@ class MainWindow(QMainWindow):
             self,
             QCoreApplication.translate('MainWindow',"Save Transcription"),
             default_name,
-            QCoreApplication.translate('MainWindow',"Subtitle Files (*.srt)")
+            QCoreApplication.translate('MainWindow',"Subtitle Files (*.srt *.vtt)")
         )
 
         if hasattr(self.subtitle_creator, 'transcription_worker'):
@@ -1000,7 +1006,7 @@ class MainWindow(QMainWindow):
             self,
             QCoreApplication.translate('MainWindow',"Save Translated Subtitles"),
             default_name,
-            QCoreApplication.translate('MainWindow',"Subtitle Files (*.srt)")
+            QCoreApplication.translate('MainWindow',"Subtitle Files (*.srt *.vtt)")
         )
 
         if hasattr(self.srt_translator, 'translation_worker'):
