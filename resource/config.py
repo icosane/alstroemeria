@@ -42,7 +42,8 @@ class ArgosPathManager:
 # Initialize Argos paths BEFORE any Argos Translate imports
 ArgosPathManager.initialize()
 
-from argostranslate import argospm
+from argostranslate import argospm, settings
+settings.device='cuda' if get_cuda_device_count() != 0 else "cpu"
 
 class TTSPathManager:
     """Manages coquiTTS directory configuration"""

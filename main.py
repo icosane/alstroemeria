@@ -3,9 +3,11 @@ from PyQt6.QtGui import QColor, QIcon
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QLabel
 from PyQt6.QtCore import Qt, pyqtSignal, QTranslator, QCoreApplication, QTimer
 sys.stdout = open(os.devnull, 'w')
-from qfluentwidgets import setThemeColor, TransparentToolButton, FluentIcon, PushSettingCard, isDarkTheme, SettingCard, MessageBox, FluentTranslator, IndeterminateProgressBar, HeaderCardWidget, BodyLabel, IconWidget, InfoBarIcon, PushButton, SubtitleLabel, ComboBoxSettingCard, OptionsSettingCard, HyperlinkCard, ScrollArea, InfoBar, InfoBarPosition, StrongBodyLabel, Flyout, FlyoutAnimationType
+import warnings
+warnings.filterwarnings("ignore")
+from qfluentwidgets import setThemeColor, TransparentToolButton, FluentIcon, PushSettingCard, isDarkTheme, SettingCard, MessageBox, FluentTranslator, IndeterminateProgressBar, HeaderCardWidget, BodyLabel, IconWidget, InfoBarIcon, PushButton, SubtitleLabel, ComboBoxSettingCard, OptionsSettingCard, HyperlinkCard, ScrollArea, InfoBar, InfoBarPosition, StrongBodyLabel, Flyout, FlyoutAnimationType, TransparentTogglePushButton
 from winrt.windows.ui.viewmanagement import UISettings, UIColorType
-from resource.config import cfg
+from resource.config import cfg, TranslationPackage, available_packages
 from resource.model_utils import update_model, update_device
 from resource.subtitle_creator import SubtitleCreator
 from resource.srt_translator import SRTTranslator
@@ -16,6 +18,7 @@ import shutil
 import traceback, gc
 import tempfile
 from ctranslate2 import get_cuda_device_count
+from pathlib import Path
 import glob
 
 def get_lib_paths():
@@ -25,13 +28,21 @@ def get_lib_paths():
         base_dir = os.path.join(sys.prefix, "Lib", "site-packages")
 
     nvidia_base_libs = os.path.join(base_dir, "nvidia")
-    cuda_libs = os.path.join(nvidia_base_libs, "cuda_runtime", "bin")
-    cublas_libs = os.path.join(nvidia_base_libs, "cublas", "bin")
-    cudnn_libs = os.path.join(nvidia_base_libs, "cudnn", "bin")
+    cuda_runtime = os.path.join(nvidia_base_libs, "cuda_runtime", "bin")
+    cublas = os.path.join(nvidia_base_libs, "cublas", "bin")
+    cudnn = os.path.join(nvidia_base_libs, "cudnn", "bin")
+    cuda_cupti = os.path.join(nvidia_base_libs, "cuda_cupti", "bin")
+    cuda_nvrtc = os.path.join(nvidia_base_libs, "cuda_nvrtc", "bin")
+    cufft = os.path.join(nvidia_base_libs, "cufft", "bin")
+    curand = os.path.join(nvidia_base_libs, "curand", "bin")
+    cusolver = os.path.join(nvidia_base_libs, "cusolver", "bin")
+    cusparse = os.path.join(nvidia_base_libs, "cusparse", "bin")
+    nvjitlink = os.path.join(nvidia_base_libs, "nvjitlink", "bin")
+    nvtx = os.path.join(nvidia_base_libs, "nvtx", "bin")
 
     ffmpeg_base = os.path.join(base_dir, "ffmpeg_binaries", "binaries", "bin")
 
-    return [cuda_libs, cublas_libs, cudnn_libs, ffmpeg_base]
+    return [cuda_runtime, cublas, cudnn, cuda_cupti, cuda_nvrtc, cufft, curand, cusolver, cusparse, nvjitlink, nvtx, ffmpeg_base]
 
 
 for dll_path in get_lib_paths():
@@ -364,6 +375,20 @@ class MainWindow(QMainWindow):
         self.model = None
         self.last_directory = ""
         self.setAcceptDrops(True)
+        self.languages = {f"{pkg.from_code}_{pkg.to_code}": f"{pkg}" for pkg in available_packages}
+        self.lang_buttons = {
+            'settings': {}
+        }
+
+        self.scroll_area_settings = ScrollArea()
+        self.scroll_area_settings.setWidgetResizable(True)
+        self.scroll_area_settings.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll_area_settings.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll_area_settings.setFixedHeight(50)
+        self.lang_layout_settings = QHBoxLayout()
+        self.lang_widget_settings = QWidget()
+        self.lang_widget_settings.setLayout(self.lang_layout_settings)
+        self.lang_layout_settings.addStretch()
 
         self.theme_changed.connect(self.update_theme)
         self.model_changed.connect(lambda: update_model(self))
@@ -532,6 +557,67 @@ class MainWindow(QMainWindow):
 
         self.back_button.hide()
 
+    def check_packages(self):
+        translation_mapping = {f"{pkg.from_code}_{pkg.to_code}": getattr(TranslationPackage, f"{pkg.from_code.upper()}_TO_{pkg.to_code.upper()}", None) for pkg in available_packages}
+
+        def update_layout(layout):
+            layout_key = 'settings'
+            self.lang_buttons[layout_key].clear()
+
+            # Clear the layout
+            for i in reversed(range(layout.count())):
+                widget = layout.itemAt(i).widget()
+                if widget and widget.parent() is not None:
+                    widget.deleteLater()
+
+            # Find available languages
+            available_languages = []
+            for language_pair, name in self.languages.items():
+                package_patterns = [
+                    os.path.join(
+                        base_dir,
+                        "models/argostranslate/data/argos-translate/packages",
+                        f"translate-{language_pair}-*"
+                    ),
+                    os.path.join(
+                        base_dir,
+                        "models/argostranslate/data/argos-translate/packages",
+                        f"{language_pair}"
+                    )
+                ]
+                found = False
+                for pattern in package_patterns:
+                    if any(Path(p).is_dir() for p in glob.glob(pattern)):
+                        found = True
+                        break
+                if found:
+                    available_languages.append((language_pair, name))
+
+            # Create buttons for available languages
+            current_package = cfg.get(cfg.package).value
+            for code, name in available_languages:
+                lang_button = TransparentTogglePushButton(name)
+                lang_button.setChecked(code == current_package)
+                self.lang_buttons[layout_key][code] = lang_button
+
+                def handler(checked=False, c=code):
+                    # Uncheck all others
+                    for btns in self.lang_buttons.values():
+                        for other_code, other_btn in btns.items():
+                            other_btn.setChecked(other_code == c)
+
+                    cfg.set(cfg.package, translation_mapping[c])
+                    self.card_settlpackage.setValue(translation_mapping[c])
+
+                lang_button.clicked.connect(handler)
+                layout.addWidget(lang_button, alignment=Qt.AlignmentFlag.AlignTop)
+
+            # Show/hide the widget based on available languages
+            if layout == self.lang_layout_settings:
+                self.scroll_area_settings.setVisible(len(available_languages) > 0)
+
+        update_layout(self.lang_layout_settings)
+
     def settings_layout(self):
         settings_layout = QVBoxLayout()
 
@@ -597,23 +683,16 @@ class MainWindow(QMainWindow):
             icon=FluentIcon.CLOUD_DOWNLOAD,
             title=QCoreApplication.translate("MainWindow","Argos Translate package"),
             content=QCoreApplication.translate("MainWindow", "Change translation package"),
-            texts=[
-                "None", "sq_en", "ar_en", "az_en", "eu_en", "bn_en", "bg_en", "ca_en", "zh_tw_en", "zh_en",
-                "cs_en", "da_en", "nl_en", "en_sq", "en_ar", "en_az", "en_eu", "en_bn", "en_bg",
-                "en_ca", "en_zh", "en_zh_tw", "en_cs", "en_da", "en_nl", "en_eo", "en_et", "en_fi",
-                "en_fr", "en_gl", "en_de", "en_el", "en_he", "en_hi", "en_hu", "en_id", "en_ga",
-                "en_it", "en_ja", "en_ko", "en_lv", "en_lt", "en_ms", "en_no", "en_fa", "en_pl",
-                "en_pt", "en_pt_br", "en_ro", "en_ru", "en_sk", "en_sl", "en_es", "en_sv", "en_tl",
-                "en_th", "en_tr", "en_uk", "en_ur", "eo_en", "et_en", "fi_en", "fr_en", "gl_en",
-                "de_en", "el_en", "he_en", "hi_en", "hu_en", "id_en", "ga_en", "it_en", "ja_en",
-                "ko_en", "lv_en", "lt_en", "ms_en", "no_en", "fa_en", "pl_en", "pt_br_en", "pt_en",
-                "pt_es", "ro_en", "ru_en", "sk_en", "sl_en", "es_en", "es_pt", "sv_en", "tl_en",
-                "th_en", "tr_en", "uk_en", "ur_en"
+            texts=['None',
+                *[self.languages.get(f"{pkg.from_code}_{pkg.to_code}", f"{pkg.from_code} → {pkg.to_code}") for pkg in available_packages]
             ]
         )
 
         card_layout.addWidget(self.card_settlpackage, alignment=Qt.AlignmentFlag.AlignTop)
         cfg.package.valueChanged.connect(self.package_changed.emit)
+        self.scroll_area_settings.setWidget(self.lang_widget_settings)
+        card_layout.addWidget(self.scroll_area_settings)
+        self.check_packages()
 
         self.card_setttsmodel = ComboBoxSettingCard(
             configItem=cfg.tts_model,
@@ -821,6 +900,7 @@ class MainWindow(QMainWindow):
             # Only update config if we actually removed something
             if removed_dirs or removed_file:
                 cfg.set(cfg.package, 'None')
+                self.check_packages()
 
                 InfoBar.success(
                     title=QCoreApplication.translate("MainWindow", "Success"),
@@ -1167,6 +1247,7 @@ class MainWindow(QMainWindow):
                 parent=self.settings_win
             )
             self.update_argos_remove_button_state(True)
+            self.check_packages()
         elif status.startswith("error"):
             InfoBar.error(
                 title=QCoreApplication.translate("MainWindow", "Error"),
