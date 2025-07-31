@@ -31,18 +31,10 @@ def get_lib_paths():
     cuda_runtime = os.path.join(nvidia_base_libs, "cuda_runtime", "bin")
     cublas = os.path.join(nvidia_base_libs, "cublas", "bin")
     cudnn = os.path.join(nvidia_base_libs, "cudnn", "bin")
-    cuda_cupti = os.path.join(nvidia_base_libs, "cuda_cupti", "bin")
-    cuda_nvrtc = os.path.join(nvidia_base_libs, "cuda_nvrtc", "bin")
-    cufft = os.path.join(nvidia_base_libs, "cufft", "bin")
-    curand = os.path.join(nvidia_base_libs, "curand", "bin")
-    cusolver = os.path.join(nvidia_base_libs, "cusolver", "bin")
-    cusparse = os.path.join(nvidia_base_libs, "cusparse", "bin")
-    nvjitlink = os.path.join(nvidia_base_libs, "nvjitlink", "bin")
-    nvtx = os.path.join(nvidia_base_libs, "nvtx", "bin")
 
     ffmpeg_base = os.path.join(base_dir, "ffmpeg_binaries", "binaries", "bin")
 
-    return [cuda_runtime, cublas, cudnn, cuda_cupti, cuda_nvrtc, cufft, curand, cusolver, cusparse, nvjitlink, nvtx, ffmpeg_base]
+    return [cuda_runtime, cublas, cudnn, ffmpeg_base]
 
 
 for dll_path in get_lib_paths():
