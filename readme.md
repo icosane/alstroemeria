@@ -18,6 +18,16 @@ It may not receive regular updates, new features, or bug fixes.
 
 ---
 
+## Screenshots
+
+<div style="display: flex; flex-direction: column;">
+    <img src="./assets/1.png" alt="UI Screenshot" style="margin: 5px 0;" />
+    <img src="./assets/2.png" alt="UI Screenshot" style="margin: 5px 0;"/>
+    <img src="./assets/3.png" alt="UI Screenshot" style="margin: 5px 0;"/>
+</div>  
+
+---
+
 ## Getting Started
 
 ### Prerequisites
@@ -99,16 +109,6 @@ Alternatively, open the folder in [Visual Studio Code](https://code.visualstudio
 - [Manuka icons](https://www.flaticon.com/free-icon/myrtus_8868385) – created by Paul J. (Flaticon)
 
    **This software contains source code provided by NVIDIA Corporation.**
----
-
-## Screenshots
-
-<div style="display: flex; flex-direction: column;">
-    <img src="./assets/1.png" alt="UI Screenshot" style="margin: 5px 0;" />
-    <img src="./assets/2.png" alt="UI Screenshot" style="margin: 5px 0;"/>
-    <img src="./assets/3.png" alt="UI Screenshot" style="margin: 5px 0;"/>
-</div>  
-
 ---
 
 ## License
