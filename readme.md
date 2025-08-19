@@ -62,7 +62,7 @@ Alternatively, open the folder in [Visual Studio Code](https://code.visualstudio
 
 ---
 
-### Build Executable (.exe)
+### Optional: Build Executable (.exe)
 
 1. Install PyInstaller:
    ```bash
