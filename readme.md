@@ -96,8 +96,9 @@ Alternatively, open the folder in [Visual Studio Code](https://code.visualstudio
 - [pydub](https://github.com/jiaaro/pydub)  
 - [langdetect](https://github.com/Mimino666/langdetect)  
 - [PyInstaller](https://pyinstaller.org/)  
-- [Manuka icons](https://www.flaticon.com/free-icon/myrtus_8868385) – created by Paul J. (Flaticon)  
+- [Manuka icons](https://www.flaticon.com/free-icon/myrtus_8868385) – created by Paul J. (Flaticon)
 
+   **This software contains source code provided by NVIDIA Corporation.**
 ---
 
 ## Screenshots
